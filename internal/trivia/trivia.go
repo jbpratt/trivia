@@ -1,0 +1,283 @@
+// Package trivia ...
+package trivia
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"math/rand"
+	"net/http"
+	"net/url"
+	"sort"
+	"time"
+
+	"go.uber.org/zap"
+)
+
+const baseURL = "https://opentdb.com/"
+
+type response struct {
+	ResponseCode int `json:"response_code"`
+	Results      []struct {
+		Category         string   `json:"category"`
+		Type             string   `json:"type"`
+		Difficulty       string   `json:"difficulty"`
+		Question         string   `json:"question"`
+		CorrectAnswer    string   `json:"correct_answer"`
+		IncorrectAnswers []string `json:"incorrect_answers"`
+	} `json:"results"`
+}
+
+type Round struct {
+	logger       *zap.SugaredLogger
+	Category     string
+	Difficulty   string
+	Question     string
+	Answers      []*Answer
+	Participants []*Participant
+	Complete     bool
+	PrevRound    *Round
+	NextRound    *Round
+}
+
+type Answer struct {
+	Value   string
+	Correct bool
+}
+
+type Participant struct {
+	Name   string
+	Choice int
+	TimeIn int64
+}
+
+type Quiz struct {
+	logger       *zap.SugaredLogger
+	client       *http.Client
+	url          string
+	duration     time.Duration
+	FirstRound   *Round
+	CurrentRound *Round
+	Timer        *time.Timer
+	InProgress   bool
+	Score        map[int]string
+}
+
+func NewDefaultQuiz(logger *zap.SugaredLogger) (*Quiz, error) {
+	return NewQuiz(logger, 3, 25*time.Second)
+}
+
+func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz, error) {
+	rand.Seed(time.Now().UnixNano())
+
+	client := &http.Client{}
+	resp, err := client.Get(fmt.Sprintf("%s/api_token.php?command=request", baseURL))
+	if err != nil {
+		return nil, fmt.Errorf("failed to request token: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Debug("server returned bad response", "status_code", resp.StatusCode)
+		return nil, fmt.Errorf("server returned invalid http code: %d", resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read token response body: %v", err)
+	}
+
+	tokenRes := struct {
+		Token string `json:"token"`
+	}{}
+
+	if err = json.Unmarshal(body, &tokenRes); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal token: %v", err)
+	}
+
+	u, err := url.Parse(fmt.Sprintf("%s/api.php", baseURL))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse url: %v", err)
+	}
+
+	q, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse query: %v", err)
+	}
+
+	q.Add("token", tokenRes.Token)
+	q.Add("amount", fmt.Sprint(size))
+	u.RawQuery = q.Encode()
+
+	quiz := &Quiz{
+		client:     client,
+		url:        u.String(),
+		duration:   duration,
+		InProgress: false,
+		logger:     logger,
+	}
+
+	quiz.logger.Info("new quiz created")
+	if err = quiz.newSeries(); err != nil {
+		return nil, fmt.Errorf("error creating new quiz: %v", err)
+	}
+
+	return quiz, nil
+}
+
+func (q *Quiz) newSeries() error {
+	q.logger.Info("creating new series of rounds")
+
+	resp, err := q.client.Get(q.url)
+	if err != nil {
+		return fmt.Errorf("failed to get api data: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		q.logger.Debugw("bad response from server", "response_code", resp.StatusCode)
+		return fmt.Errorf("server returned bad http status: %d", resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read api response body: %v", err)
+	}
+
+	var resultsResp response
+	if err = json.Unmarshal(body, &resultsResp); err != nil {
+		return fmt.Errorf("failed to unmarshal api response body: %v", err)
+	}
+
+	if len(resultsResp.Results) == 0 {
+		return fmt.Errorf("server returned no results: %v", resultsResp)
+	}
+
+	var head *Round
+	for _, result := range resultsResp.Results {
+		round := &Round{
+			logger:     q.logger,
+			Category:   result.Category,
+			Difficulty: result.Difficulty,
+			Question:   result.Question,
+			Answers: []*Answer{
+				{result.CorrectAnswer, true},
+			},
+			PrevRound: nil,
+			NextRound: head,
+		}
+		for _, value := range result.IncorrectAnswers {
+			round.Answers = append(round.Answers, &Answer{value, false})
+		}
+		if head != nil {
+			head.PrevRound = round
+		}
+		head = round
+	}
+	q.FirstRound = head
+
+	return nil
+}
+
+func (q *Quiz) StartRound(
+	onComplete func(string, map[int]string) error,
+) (*Round, error) {
+	q.logger.Info("starting round")
+
+	if q.FirstRound == nil {
+		return nil, fmt.Errorf("rounds are not initialized")
+	}
+
+	// find the first round in the list that is not marked as complete
+	q.CurrentRound = q.FirstRound
+	for q.CurrentRound.Complete {
+		tmp := q.CurrentRound
+		if tmp.NextRound != nil {
+			q.CurrentRound = tmp.NextRound
+		}
+	}
+
+	q.logger.Infow("determined round", "question", q.CurrentRound.Question)
+
+	rand.Shuffle(len(q.CurrentRound.Answers), func(i, j int) {
+		q.CurrentRound.Answers[i], q.CurrentRound.Answers[j] = q.CurrentRound.Answers[j], q.CurrentRound.Answers[i]
+	})
+
+	q.logger.Info("shuffled answers")
+
+	q.Timer = time.AfterFunc(q.duration, func() {
+		q.logger.Info("time is up!")
+
+		roundScore := q.CurrentRound.DetermineWinners()
+		if q.Score == nil {
+			q.Score = roundScore
+		} else {
+			for k, v := range roundScore {
+				q.Score[k] += v
+			}
+		}
+
+		var correct string
+		for idx, ans := range q.CurrentRound.Answers {
+			if ans.Correct {
+				correct = fmt.Sprintf("`%d: %s`", idx+1, ans.Value)
+				break
+			}
+		}
+
+		if err := onComplete(correct, roundScore); err != nil {
+			fmt.Println(err.Error())
+		}
+		q.InProgress = false
+		q.CurrentRound.Complete = true
+	})
+
+	q.logger.Infow("timer started", "duration", q.duration)
+	q.InProgress = true
+	q.logger.Info("round set to in progress")
+
+	return q.CurrentRound, nil
+}
+
+func (r *Round) NewParticipant(username string, answer int, time int64) bool {
+	for _, participant := range r.Participants {
+		if participant.Name == username {
+			return false
+		}
+	}
+
+	r.logger.Infow("new participant", "username", username, "answer", answer, "time", time)
+	r.Participants = append(r.Participants, &Participant{username, answer, time})
+	return true
+}
+
+func (r *Round) DetermineWinners() map[int]string {
+	r.logger.Info("determining winners")
+
+	correctIdx := 0
+	for idx, ans := range r.Answers {
+		if ans.Correct {
+			correctIdx = idx
+			break
+		}
+	}
+
+	correctParticipants := []*Participant{}
+	// filter participants for correct choice
+	for _, participant := range r.Participants {
+		if participant.Choice == correctIdx {
+			correctParticipants = append(correctParticipants, participant)
+		}
+	}
+
+	// sort participants by time in
+	sort.Slice(correctParticipants, func(i, j int) bool {
+		return correctParticipants[i].TimeIn < correctParticipants[j].TimeIn
+	})
+
+	winners := map[int]string{}
+	for idx, participant := range correctParticipants {
+		winners[idx] = participant.Name
+	}
+
+	r.logger.Infow("winners determined", "winners", winners)
+	return winners
+}
