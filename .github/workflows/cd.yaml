@@ -17,10 +17,10 @@ jobs:
       env:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-      run: podman login https://docker.pkg.github.com -u ${username} -p ${password}
+      run: podman login ghcr.io -u ${username} -p ${password}
 
     - name: Build image
-      run: podman build . -t docker.pkg.github.com/jbpratt/triviabot/triviabot:latest
+      run: podman build . -t ghcr.io/jbpratt/triviabot:latest
 
     - name: Publish image
-      run: podman push docker.pkg.github.com/jbpratt/triviabot/triviabot:latest
+      run: podman push ghcr.io/jbpratt/triviabot:latest
