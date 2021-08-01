@@ -61,11 +61,16 @@ type Quiz struct {
 	CurrentRound *Round
 	Timer        *time.Timer
 	InProgress   bool
-	Score        map[string]int
+	Score        []Score
+}
+
+type Score struct {
+	Points int
+	Name   string
 }
 
 func NewDefaultQuiz(logger *zap.SugaredLogger) (*Quiz, error) {
-	return NewQuiz(logger, 3, 25*time.Second)
+	return NewQuiz(logger, 3, 30*time.Second)
 }
 
 func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz, error) {
@@ -115,7 +120,7 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz
 		duration:   duration,
 		logger:     logger,
 		InProgress: false,
-		Score:      map[string]int{},
+		Score:      []Score{},
 	}
 
 	quiz.logger.Info("new quiz created, creating new series of rounds")
@@ -224,7 +229,7 @@ func (q *Quiz) StartRound(
 				break
 			}
 
-			q.Score[v.Name] += score
+			q.Score = append(q.Score, Score{score, v.Name})
 			score--
 		}
 
@@ -232,7 +237,7 @@ func (q *Quiz) StartRound(
 		var correct string
 		for idx, ans := range q.CurrentRound.Answers {
 			if ans.Correct {
-				correct = fmt.Sprintf("`%d: %s`", idx+1, ans.Value)
+				correct = fmt.Sprintf("`%d) %s`", idx+1, ans.Value)
 				break
 			}
 		}

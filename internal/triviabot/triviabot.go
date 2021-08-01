@@ -3,6 +3,7 @@ package triviabot
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -130,6 +131,12 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 		return fmt.Errorf("failed to start the round: %v", err)
 	}
 
+	if err = t.bot.Send("Quiz starting soon! PM the number beside the answer. First 3 in get awarded points."); err != nil {
+		return fmt.Errorf("failed to send starting message: %w", err)
+	}
+
+	time.Sleep(10 * time.Second)
+
 	if err = t.runRound(ctx, round); err != nil {
 		return fmt.Errorf("error running round: %v", err)
 	}
@@ -159,19 +166,24 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 	if len(t.quiz.Score) == 0 {
 		output += "No one! DuckerZ"
 	} else {
+		// sort winners by points for top 3
+		sort.Slice(t.quiz.Score, func(i, j int) bool {
+			return t.quiz.Score[i].Points > t.quiz.Score[j].Points
+		})
+
 		limit := 3
-		for k, v := range t.quiz.Score {
+		for _, score := range t.quiz.Score {
 			if limit == 0 {
 				break
 			}
-			output += fmt.Sprintf("`%s with %d point(s)`", k, v)
+			output += fmt.Sprintf("%s - %d point(s) ", score.Name, score.Points)
 			limit--
 		}
 
 		// update leaderboard at the end of the quiz with all users' points
 		data := map[string]int{}
-		for user, points := range t.quiz.Score {
-			data[user] = points
+		for _, score := range t.quiz.Score {
+			data[score.Name] = score.Points
 		}
 
 		if err = t.leaderboard.Update(data); err != nil {
@@ -183,16 +195,16 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 }
 
 func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
-	leading := fmt.Sprintf("Round %d starting", round.Num)
+	leading := fmt.Sprintf("Round %d", round.Num)
 	if round.NextRound == nil {
-		leading = "Final round starting"
+		leading = "Final round"
 	}
 
-	output := fmt.Sprintf("%s, PM the number beside the answer. `%s | %s`. `%s`", leading, round.Category, round.Difficulty, round.Question)
+	output := fmt.Sprintf("%s, PM the number. %q (%s). Question: `%s` Answers:", leading, round.Category, round.Difficulty, round.Question)
 
 	// answers have already been shuffled
 	for idx, ans := range round.Answers {
-		output += fmt.Sprintf(" `%d: %s`", idx+1, ans.Value)
+		output += fmt.Sprintf(" `%d) %s`", idx+1, ans.Value)
 	}
 
 	t.logger.Infow("running round and waiting for completion", "output", output)
@@ -214,14 +226,14 @@ func (t *TriviaBot) onRoundCompletion(correct string, score []*trivia.Participan
 	// Delay the start of the next round
 	defer time.Sleep(10 * time.Second)
 
-	output := fmt.Sprintf("Round complete! The correct answer is: %s", correct)
+	output := fmt.Sprintf("Round complete! Answer: %s", correct)
 	if len(score) == 0 {
-		return t.bot.Send(output + " No one answered correctly.")
+		return t.bot.Send(output + " No one answered correctly DuckerZ")
 	}
 
-	output += " The winners are:"
+	output += " Winners:"
 	for i := 0; i < len(score) && i <= 2; i++ {
-		output += fmt.Sprintf(" `%d: %s`", i+1, score[i].Name)
+		output += fmt.Sprintf(" %d: %s", i+1, score[i].Name)
 
 		//	timeDiff := score[i].TimeIn - score[i-1].TimeIn
 		//	output += fmt.Sprintf(" +%d", timeDiff)
