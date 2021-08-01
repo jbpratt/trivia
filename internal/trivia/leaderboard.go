@@ -3,6 +3,7 @@ package trivia
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"fmt"
 	"sync"
 
@@ -14,6 +15,9 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+//go:embed leaderboard/init.sql
+var initSql string
+
 type Leaderboard struct {
 	logger *zap.SugaredLogger
 	db     *sql.DB
@@ -24,6 +28,10 @@ func NewLeaderboard(logger *zap.SugaredLogger, path string) (*Leaderboard, error
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open DB(%s): %v", path, err)
+	}
+
+	if _, err = db.ExecContext(context.Background(), initSql); err != nil {
+		return nil, fmt.Errorf("failed to run init sql: %v", err)
 	}
 
 	boil.SetDB(db)
@@ -46,13 +54,16 @@ func (l *Leaderboard) Update(entries map[string]int) error {
 	}
 
 	for name, points := range entries {
-		exists, err := models.Users(models.UserWhere.Name.EQ(name)).ExistsG(ctx)
+		var user *models.User
+		var exists bool
+
+		exists, err = models.Users(models.UserWhere.Name.EQ(name)).ExistsG(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to determine if user exists: %v", err)
 		}
 
 		if exists {
-			user, err := models.Users(models.UserWhere.Name.EQ(name)).OneG(ctx)
+			user, err = models.Users(models.UserWhere.Name.EQ(name)).OneG(ctx)
 			if err != nil {
 				return fmt.Errorf("failed to get user(%s): %v", name, err)
 			}
@@ -65,7 +76,7 @@ func (l *Leaderboard) Update(entries map[string]int) error {
 				return fmt.Errorf("failed to update user: %v", err)
 			}
 		} else {
-			user := &models.User{
+			user = &models.User{
 				Name:        name,
 				Points:      int64(points),
 				GamesPlayed: 1,

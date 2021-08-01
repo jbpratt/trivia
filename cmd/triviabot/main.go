@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 
@@ -8,9 +9,17 @@ import (
 	"go.uber.org/zap"
 )
 
-const devurl = "wss://chat2.strims.gg/ws"
-
 func main() {
+	serverURL := "wss://chat.strims.gg/ws"
+	dbPath := flag.String("db", "/tmp/trivia.db", "path to sqlite database")
+	dev := flag.Bool("dev", false, "use chat2")
+
+	flag.Parse()
+
+	if *dev {
+		serverURL = "wss://chat2.strims.gg/ws"
+	}
+
 	logger, err := zap.NewDevelopment()
 	if err != nil {
 		log.Fatal(err)
@@ -23,13 +32,13 @@ func main() {
 
 	url, jwt := os.Getenv("STRIMS_CHAT_WSS_URL"), os.Getenv("STRIMS_CHAT_TOKEN")
 	if url == "" {
-		url = devurl
+		url = serverURL
 	}
 	if jwt == "" {
 		logger.Fatal("must provide $STRIMS_CHAT_TOKEN")
 	}
 
-	triviabot, err := triviabot.New(logger.Sugar(), url, jwt, "trivia.db", 3, 15)
+	triviabot, err := triviabot.New(logger.Sugar(), url, jwt, *dbPath, 3, 15)
 	if err != nil {
 		logger.Fatal(err.Error())
 	}
