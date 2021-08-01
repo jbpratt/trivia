@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/jbpratt/bots/internal/trivia/leaderboard/models"
 	"github.com/volatiletech/sqlboiler/v4/boil"
@@ -22,6 +24,7 @@ type Leaderboard struct {
 	logger *zap.SugaredLogger
 	db     *sql.DB
 	rw     sync.RWMutex
+	rand   *rand.Rand
 }
 
 func NewLeaderboard(logger *zap.SugaredLogger, path string) (*Leaderboard, error) {
@@ -38,6 +41,7 @@ func NewLeaderboard(logger *zap.SugaredLogger, path string) (*Leaderboard, error
 	return &Leaderboard{
 		logger: logger,
 		db:     db,
+		rand:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 
@@ -77,6 +81,7 @@ func (l *Leaderboard) Update(entries map[string]int) error {
 			}
 		} else {
 			user = &models.User{
+				ID:          rand.Int63(),
 				Name:        name,
 				Points:      int64(points),
 				GamesPlayed: 1,

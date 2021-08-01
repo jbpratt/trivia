@@ -118,7 +118,7 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz
 		Score:      map[string]int{},
 	}
 
-	quiz.logger.Info("new quiz created")
+	quiz.logger.Info("new quiz created, creating new series of rounds")
 	if err = quiz.newSeries(); err != nil {
 		return nil, fmt.Errorf("error creating new quiz: %v", err)
 	}
@@ -127,8 +127,6 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz
 }
 
 func (q *Quiz) newSeries() error {
-	q.logger.Info("creating new series of rounds")
-
 	resp, err := q.client.Get(q.url)
 	if err != nil {
 		return fmt.Errorf("failed to get api data: %v", err)
@@ -204,8 +202,7 @@ func (q *Quiz) StartRound(
 	// find the first round in the list that is not marked as complete
 	q.CurrentRound = q.FirstRound
 	for q.CurrentRound.Complete {
-		tmp := q.CurrentRound
-		if tmp.NextRound != nil {
+		if tmp := q.CurrentRound; tmp.NextRound != nil {
 			q.CurrentRound = tmp.NextRound
 		}
 	}
@@ -240,7 +237,7 @@ func (q *Quiz) StartRound(
 			}
 		}
 
-		q.logger.Infof("correct answer is %q", correct)
+		q.logger.Infof("the correct answer is %q", correct)
 
 		if err := onComplete(correct, roundScore); err != nil {
 			q.logger.Fatalf("failed to run onComplete: %v", err)
@@ -249,9 +246,8 @@ func (q *Quiz) StartRound(
 		q.CurrentRound.Complete = true
 	})
 
-	q.logger.Infow("timer started", "duration", q.duration)
+	q.logger.Infow("timer started, round set to in progress", "duration", q.duration)
 	q.InProgress = true
-	q.logger.Info("round set to in progress")
 
 	return q.CurrentRound, nil
 }
@@ -269,8 +265,6 @@ func (r *Round) NewParticipant(username string, answer int, time int64) bool {
 }
 
 func (r *Round) DetermineWinners() []*Participant {
-	r.logger.Info("determining winners")
-
 	correctIdx := 0
 	for idx, ans := range r.Answers {
 		if ans.Correct {
