@@ -1,1 +1,0 @@
-# strims trivia bot

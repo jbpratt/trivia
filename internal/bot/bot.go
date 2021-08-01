@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
@@ -46,7 +47,7 @@ func New(logger *zap.SugaredLogger, url, jwt string) (*Bot, error) {
 
 func (b *Bot) Send(msg string) error {
 	marsha, err := json.Marshal(&Msg{
-		Data: strings.Replace(html.UnescapeString(msg), "\"", "'", -1),
+		Data: strings.ReplaceAll(html.UnescapeString(msg), "\"", "'"),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to marshal output msg: %v", err)
@@ -61,7 +62,7 @@ func (b *Bot) Send(msg string) error {
 
 func (b *Bot) SendPriv(msg, user string) error {
 	marsha, err := json.Marshal(&Msg{
-		Data: strings.Replace(html.UnescapeString(msg), "\"", "'", -1),
+		Data: strings.ReplaceAll(html.UnescapeString(msg), "\"", "'"),
 		User: user,
 	})
 	if err != nil {
@@ -75,26 +76,22 @@ func (b *Bot) SendPriv(msg, user string) error {
 	return nil
 }
 
-func (b *Bot) send(msg string) error {
-	b.logger.Debugw("sending msg", "msg", msg)
-	if err := b.conn.Write(context.Background(), websocket.MessageText, []byte(msg)); err != nil {
-		return fmt.Errorf("failed to write message: %v", err)
-	}
-	return nil
-}
-
 func (b *Bot) OnMessage(funcs ...func(context.Context, *Msg) error) {
-	b.logger.Debug("configuring onMessage functions")
+	b.logger.Debug("setting onMessage functions")
 	b.onMsgFuncs = append(b.onMsgFuncs, funcs...)
 }
 
 func (b *Bot) OnPrivMessage(funcs ...func(context.Context, *Msg) error) {
-	b.logger.Debug("configuring onPrivMessage functions")
+	b.logger.Debug("setting onPrivMessage functions")
 	b.onPrivMsgFuncs = append(b.onPrivMsgFuncs, funcs...)
 }
 
 func (b *Bot) Run() error {
-	defer b.Destroy()
+	defer func() {
+		if err := b.Destroy(); err != nil {
+			b.logger.Fatalf("failed to destroy bot: %v", err)
+		}
+	}()
 
 	b.logger.Info("bot is now running")
 	rawMsgs := make(chan string)
@@ -115,6 +112,14 @@ func (b *Bot) Run() error {
 
 	eg.Go(func() error {
 		for raw := range rawMsgs {
+			// TODO: move this out into triviabot rather than the bot package
+			if strings.HasPrefix(raw, "VIEWERSTATE") ||
+				strings.HasPrefix(raw, "JOIN") ||
+				strings.HasPrefix(raw, "QUIT") ||
+				strings.HasPrefix(raw, "NAMES") {
+				continue
+			}
+
 			msg, err := parseMsg(raw)
 			if err != nil {
 				b.logger.Infow("failed to parse msg", "err", err)
@@ -122,18 +127,20 @@ func (b *Bot) Run() error {
 			}
 
 			b.logger.Debugw("parsed msg", "msg", msg)
-			if msg.Kind == "MSG" {
+			switch msg.Kind {
+			case "MSG":
 				for _, f := range b.onMsgFuncs {
 					if err = f(ctx, msg); err != nil {
 						return fmt.Errorf("on message func err: %v", err)
 					}
 				}
-			} else if msg.Kind == "PRIVMSG" {
+			case "PRIVMSG":
 				for _, f := range b.onPrivMsgFuncs {
 					if err = f(ctx, msg); err != nil {
 						return fmt.Errorf("on private message func err: %v", err)
 					}
 				}
+			default:
 			}
 		}
 		return nil
@@ -152,6 +159,14 @@ func (b *Bot) Destroy() error {
 }
 
 func parseMsg(raw string) (*Msg, error) {
+	if strings.HasPrefix(raw, "ERR") {
+		value, err := strconv.Unquote(raw[4:])
+		if err != nil {
+			return nil, fmt.Errorf("failed to unquote string: %v", err)
+		}
+		return nil, fmt.Errorf("server returned error: %s", value)
+	}
+
 	data := strings.SplitN(raw, " ", 2)
 	var content map[string]interface{}
 	var err error
@@ -166,4 +181,12 @@ func parseMsg(raw string) (*Msg, error) {
 		}
 	}
 	return out, nil
+}
+
+func (b *Bot) send(msg string) error {
+	b.logger.Debugw("sending msg", "msg", msg)
+	if err := b.conn.Write(context.Background(), websocket.MessageText, []byte(msg)); err != nil {
+		return fmt.Errorf("failed to write message: %v", err)
+	}
+	return nil
 }

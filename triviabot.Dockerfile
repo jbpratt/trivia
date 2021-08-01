@@ -1,8 +1,8 @@
 FROM docker.io/library/golang:1.16-buster as build
 
 ENV GO111MODULE=on
-WORKDIR /go/src/trivia
-ADD . /go/src/trivia
+WORKDIR /go/src/bots
+ADD . /go/src/bots
 
 RUN go get -d -v ./...
 RUN go build -o /go/bin/triviabot ./cmd/triviabot/

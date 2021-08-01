@@ -1,0 +1,9 @@
+output              = "models"
+wipe                = true
+no-hooks            = true
+no-tests            = true
+add-global-variants = true
+struct-tag-casing   = "camel"
+
+[sqlite3]
+dbname = "trivia.db"

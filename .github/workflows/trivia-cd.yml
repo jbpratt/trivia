@@ -1,9 +1,11 @@
-name: cd
+name: CD - triviabot
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
+    paths:
+      - 'cmd/triviabot/*'
+      - 'internal/trivia*'
+      - 'internal/bot/*'
     branches: [ main ]
 
 jobs:
@@ -20,7 +22,7 @@ jobs:
       run: podman login ghcr.io -u ${username} -p ${password}
 
     - name: Build image
-      run: podman build . -t ghcr.io/jbpratt/triviabot:latest
+      run: podman build -f triviabot.Dockerfile -t ghcr.io/jbpratt/triviabot:latest
 
     - name: Publish image
       run: podman push ghcr.io/jbpratt/triviabot:latest

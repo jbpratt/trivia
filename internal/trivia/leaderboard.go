@@ -1,67 +1,97 @@
 package trivia
 
 import (
-	"errors"
+	"context"
+	"database/sql"
 	"fmt"
+	"sync"
 
-	"go.etcd.io/bbolt"
+	"github.com/jbpratt/bots/internal/trivia/leaderboard/models"
+	"github.com/volatiletech/sqlboiler/v4/boil"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"go.uber.org/zap"
-)
 
-var bucketName = []byte("leaderboard")
+	_ "github.com/mattn/go-sqlite3"
+)
 
 type Leaderboard struct {
 	logger *zap.SugaredLogger
-	db     *bbolt.DB
+	db     *sql.DB
+	rw     sync.RWMutex
 }
 
 func NewLeaderboard(logger *zap.SugaredLogger, path string) (*Leaderboard, error) {
-	db, err := bbolt.Open(path, 0600, nil)
+	db, err := sql.Open("sqlite3", path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open db: %v", err)
+		return nil, fmt.Errorf("failed to open DB(%s): %v", path, err)
 	}
 
-	tx, err := db.Begin(true)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create transaction: %v", err)
-	}
-
-	_, err = tx.CreateBucketIfNotExists(bucketName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bucket: %v", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %v", err)
-	}
-
-	return &Leaderboard{logger, db}, nil
+	boil.SetDB(db)
+	return &Leaderboard{
+		logger: logger,
+		db:     db,
+	}, nil
 }
 
-func (l *Leaderboard) Update(data map[string]int) error {
-	return l.db.Batch(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(bucketName)
-		for k, v := range data {
-			if err := b.Put([]byte(k), []byte(fmt.Sprint(v))); err != nil {
-				return fmt.Errorf("failed to insert: %v/%v", k, v)
+func (l *Leaderboard) Update(entries map[string]int) error {
+	l.rw.Lock()
+	defer l.rw.Unlock()
+
+	l.logger.Info("updating leaderboard with entries: %v", entries)
+
+	ctx := context.Background()
+	tx, err := l.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+
+	for name, points := range entries {
+		exists, err := models.Users(models.UserWhere.Name.EQ(name)).ExistsG(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to determine if user exists: %v", err)
+		}
+
+		if exists {
+			user, err := models.Users(models.UserWhere.Name.EQ(name)).OneG(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to get user(%s): %v", name, err)
+			}
+
+			l.logger.Infof("found user to update: %v", user)
+
+			user.Points += int64(points)
+			user.GamesPlayed++
+			if _, err = user.UpdateG(ctx, boil.Infer()); err != nil {
+				return fmt.Errorf("failed to update user: %v", err)
+			}
+		} else {
+			user := &models.User{
+				Name:        name,
+				Points:      int64(points),
+				GamesPlayed: 1,
+			}
+			l.logger.Infof("inserting new user: %v", user)
+			if err = user.InsertG(ctx, boil.Infer()); err != nil {
+				return fmt.Errorf("failed to insert new user: %v", err)
 			}
 		}
-		return nil
-	})
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	return nil
 }
 
-func (l *Leaderboard) Get(limit int) (map[string]int, error) {
-	i := 0
-	output := make(map[string]int)
-	return output, l.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(bucketName)
-		return b.ForEach(func(k, v []byte) error {
-			if i == limit {
-				return errors.New("limit reached")
-			}
-			output[string(k)] = 0
-			i++
-			return nil
-		})
-	})
+func (l *Leaderboard) Highscores(limit int) (models.UserSlice, error) {
+	l.rw.RLock()
+	defer l.rw.RUnlock()
+
+	return models.Users(
+		models.UserWhere.Points.GT(0),
+		qm.Select(models.UserColumns.Name, models.UserColumns.Points),
+		qm.OrderBy(models.UserColumns.Points),
+		qm.Limit(limit),
+	).AllG(context.Background())
 }

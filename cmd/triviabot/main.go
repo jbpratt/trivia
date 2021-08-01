@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/jbpratt/trivia/internal/triviabot"
+	"github.com/jbpratt/bots/internal/triviabot"
 	"go.uber.org/zap"
 )
 
@@ -15,7 +15,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer logger.Sync()
+	defer func() {
+		if err = logger.Sync(); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	url, jwt := os.Getenv("STRIMS_CHAT_WSS_URL"), os.Getenv("STRIMS_CHAT_TOKEN")
 	if url == "" {
@@ -25,7 +29,7 @@ func main() {
 		logger.Fatal("must provide $STRIMS_CHAT_TOKEN")
 	}
 
-	triviabot, err := triviabot.New(logger.Sugar(), url, jwt, ".", 3, 15)
+	triviabot, err := triviabot.New(logger.Sugar(), url, jwt, "trivia.db", 3, 15)
 	if err != nil {
 		logger.Fatal(err.Error())
 	}
@@ -35,8 +39,6 @@ func main() {
 	}
 }
 
-// off by one for report
-// send msg for quiz completion with results
 // accept duration and category and difficulty
+// -- can we do this with flag.FlagSet?
 // show time difference in between pole positions
-// round number

@@ -36,6 +36,7 @@ type Round struct {
 	Answers      []*Answer
 	Participants []*Participant
 	Complete     bool
+	Num          int
 	PrevRound    *Round
 	NextRound    *Round
 }
@@ -60,7 +61,7 @@ type Quiz struct {
 	CurrentRound *Round
 	Timer        *time.Timer
 	InProgress   bool
-	Score        map[int]string
+	Score        map[string]int
 }
 
 func NewDefaultQuiz(logger *zap.SugaredLogger) (*Quiz, error) {
@@ -112,8 +113,9 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz
 		client:     client,
 		url:        u.String(),
 		duration:   duration,
-		InProgress: false,
 		logger:     logger,
+		InProgress: false,
+		Score:      map[string]int{},
 	}
 
 	quiz.logger.Info("new quiz created")
@@ -151,7 +153,9 @@ func (q *Quiz) newSeries() error {
 		return fmt.Errorf("server returned no results: %v", resultsResp)
 	}
 
+	roundNum := 1
 	var head *Round
+	var curr *Round
 	for _, result := range resultsResp.Results {
 		round := &Round{
 			logger:     q.logger,
@@ -161,24 +165,35 @@ func (q *Quiz) newSeries() error {
 			Answers: []*Answer{
 				{result.CorrectAnswer, true},
 			},
-			PrevRound: nil,
-			NextRound: head,
+			Num:       roundNum,
+			PrevRound: curr,
+			NextRound: nil,
+			Complete:  false,
 		}
+
 		for _, value := range result.IncorrectAnswers {
 			round.Answers = append(round.Answers, &Answer{value, false})
 		}
-		if head != nil {
-			head.PrevRound = round
+
+		if head == nil {
+			head = round
 		}
-		head = round
+
+		if curr != nil {
+			curr.NextRound = round
+		}
+
+		curr = round
+		roundNum++
 	}
+
 	q.FirstRound = head
 
 	return nil
 }
 
 func (q *Quiz) StartRound(
-	onComplete func(string, map[int]string) error,
+	onComplete func(string, []*Participant) error,
 ) (*Round, error) {
 	q.logger.Info("starting round")
 
@@ -195,26 +210,28 @@ func (q *Quiz) StartRound(
 		}
 	}
 
-	q.logger.Infow("determined round", "question", q.CurrentRound.Question)
+	q.logger.Infow("determined round.. shuffling answers", "question", q.CurrentRound.Question)
 
 	rand.Shuffle(len(q.CurrentRound.Answers), func(i, j int) {
 		q.CurrentRound.Answers[i], q.CurrentRound.Answers[j] = q.CurrentRound.Answers[j], q.CurrentRound.Answers[i]
 	})
 
-	q.logger.Info("shuffled answers")
-
 	q.Timer = time.AfterFunc(q.duration, func() {
 		q.logger.Info("time is up!")
 
+		// append onto the current quiz leaderboard
+		score := 3
 		roundScore := q.CurrentRound.DetermineWinners()
-		if q.Score == nil {
-			q.Score = roundScore
-		} else {
-			for k, v := range roundScore {
-				q.Score[k] += v
+		for _, v := range roundScore {
+			if score == 0 {
+				break
 			}
+
+			q.Score[v.Name] += score
+			score--
 		}
 
+		// determine correct answer and format it
 		var correct string
 		for idx, ans := range q.CurrentRound.Answers {
 			if ans.Correct {
@@ -223,8 +240,10 @@ func (q *Quiz) StartRound(
 			}
 		}
 
+		q.logger.Infof("correct answer is %q", correct)
+
 		if err := onComplete(correct, roundScore); err != nil {
-			fmt.Println(err.Error())
+			q.logger.Fatalf("failed to run onComplete: %v", err)
 		}
 		q.InProgress = false
 		q.CurrentRound.Complete = true
@@ -249,7 +268,7 @@ func (r *Round) NewParticipant(username string, answer int, time int64) bool {
 	return true
 }
 
-func (r *Round) DetermineWinners() map[int]string {
+func (r *Round) DetermineWinners() []*Participant {
 	r.logger.Info("determining winners")
 
 	correctIdx := 0
@@ -260,23 +279,18 @@ func (r *Round) DetermineWinners() map[int]string {
 		}
 	}
 
-	correctParticipants := []*Participant{}
+	winners := []*Participant{}
 	// filter participants for correct choice
 	for _, participant := range r.Participants {
 		if participant.Choice == correctIdx {
-			correctParticipants = append(correctParticipants, participant)
+			winners = append(winners, participant)
 		}
 	}
 
 	// sort participants by time in
-	sort.Slice(correctParticipants, func(i, j int) bool {
-		return correctParticipants[i].TimeIn < correctParticipants[j].TimeIn
+	sort.Slice(winners, func(i, j int) bool {
+		return winners[i].TimeIn < winners[j].TimeIn
 	})
-
-	winners := map[int]string{}
-	for idx, participant := range correctParticipants {
-		winners[idx] = participant.Name
-	}
 
 	r.logger.Infow("winners determined", "winners", winners)
 	return winners
