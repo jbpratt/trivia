@@ -2,8 +2,8 @@ package triviabot
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,17 +14,16 @@ import (
 )
 
 type TriviaBot struct {
-	logger       *zap.SugaredLogger
-	bot          *bot.Bot
-	quiz         *trivia.Quiz
-	leaderboard  *trivia.Leaderboard
-	lastQuizTime int64
+	logger          *zap.SugaredLogger
+	bot             *bot.Bot
+	quiz            *trivia.Quiz
+	leaderboard     *trivia.Leaderboard
+	lastQuizEndedAt int64
 }
 
 func New(
 	logger *zap.SugaredLogger,
-	wsURL, wsJWT, path string,
-	quizSize int,
+	url, jwt, path string,
 	duration time.Duration,
 ) (*TriviaBot, error) {
 	quiz, err := trivia.NewDefaultQuiz(logger)
@@ -32,7 +31,7 @@ func New(
 		return nil, fmt.Errorf("error creating trivia: %w", err)
 	}
 
-	bot, err := bot.New(logger, wsURL, wsJWT)
+	bot, err := bot.New(logger, url, jwt)
 	if err != nil {
 		return nil, fmt.Errorf("error creating bot: %w", err)
 	}
@@ -71,16 +70,19 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 
 	if strings.Contains(msg.Data, "start") || strings.Contains(msg.Data, "new") {
 		if t.quiz.InProgress {
-			if err := t.bot.Send("a quiz is already in progress"); err != nil {
+			if err := t.bot.Send("a quiz is already in progress JimFace"); err != nil {
 				return fmt.Errorf("failed to send quiz in progress msg: %w", err)
 			}
+			return nil
 		}
 
-		//fiveMinAgo := time.Now().Add(-5 * time.Minute).UnixNano()
-		//if t.lastQuizTime < fiveMinAgo && !strings.Contains(msg.Data, "force") {
-		// send err
-		// "on cooldown for XmXs..."
-		//}
+		fiveMinAgo := time.Now().Add(-5 * time.Minute).UnixNano()
+		if fiveMinAgo < t.lastQuizEndedAt && !strings.Contains(msg.Data, "force") {
+			if err := t.bot.Send("on cooldown PepoSleep"); err != nil {
+				return fmt.Errorf("failed to send quiz in progress msg: %w", err)
+			}
+			return nil
+		}
 
 		// TODO: allow for providing quiz size
 		var err error
@@ -125,6 +127,10 @@ func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 }
 
 func (t *TriviaBot) runQuiz(ctx context.Context) error {
+	if t.quiz.InProgress {
+		return errors.New("quiz is already in progress")
+	}
+
 	t.logger.Info("starting quiz")
 	round, err := t.quiz.StartRound(t.onRoundCompletion)
 	if err != nil {
@@ -163,30 +169,21 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 	}
 
 	output := "Quiz complete! Winners: "
-	if len(t.quiz.Score) == 0 {
+	if len(t.quiz.Scoreboard) == 0 {
 		output += "No one! DuckerZ"
 	} else {
-		// sort winners by points for top 3
-		sort.Slice(t.quiz.Score, func(i, j int) bool {
-			return t.quiz.Score[i].Points > t.quiz.Score[j].Points
-		})
+		ss := t.quiz.SortedScore()
 
 		limit := 3
-		for _, score := range t.quiz.Score {
+		for name, points := range ss {
 			if limit == 0 {
 				break
 			}
-			output += fmt.Sprintf("%s - %d point(s) ", score.Name, score.Points)
+			output += fmt.Sprintf("%s - %d point(s) ", name, points)
 			limit--
 		}
 
-		// update leaderboard at the end of the quiz with all users' points
-		data := map[string]int{}
-		for _, score := range t.quiz.Score {
-			data[score.Name] = score.Points
-		}
-
-		if err = t.leaderboard.Update(data); err != nil {
+		if err = t.leaderboard.Update(ss); err != nil {
 			return fmt.Errorf("failed to update leaderboard: %w", err)
 		}
 	}
@@ -243,6 +240,8 @@ func (t *TriviaBot) onRoundCompletion(correct string, score []*trivia.Participan
 	if err := t.bot.Send(output); err != nil {
 		return fmt.Errorf("failed to send round completion msg: %w", err)
 	}
+
+	t.lastQuizEndedAt = time.Now().UnixNano()
 
 	return nil
 }

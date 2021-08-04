@@ -61,12 +61,7 @@ type Quiz struct {
 	CurrentRound *Round
 	Timer        *time.Timer
 	InProgress   bool
-	Score        []Score
-}
-
-type Score struct {
-	Points int
-	Name   string
+	Scoreboard   map[string]int
 }
 
 func NewDefaultQuiz(logger *zap.SugaredLogger) (*Quiz, error) {
@@ -120,7 +115,7 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz
 		duration:   duration,
 		logger:     logger,
 		InProgress: false,
-		Score:      []Score{},
+		Scoreboard: map[string]int{},
 	}
 
 	quiz.logger.Info("new quiz created, creating new series of rounds")
@@ -168,10 +163,11 @@ func (q *Quiz) newSeries() error {
 			Answers: []*Answer{
 				{result.CorrectAnswer, true},
 			},
-			Num:       roundNum,
-			PrevRound: curr,
-			NextRound: nil,
-			Complete:  false,
+			Num:          roundNum,
+			PrevRound:    curr,
+			NextRound:    nil,
+			Complete:     false,
+			Participants: []*Participant{},
 		}
 
 		for _, value := range result.IncorrectAnswers {
@@ -229,7 +225,7 @@ func (q *Quiz) StartRound(
 				break
 			}
 
-			q.Score = append(q.Score, Score{score, v.Name})
+			q.Scoreboard[v.Name] += score
 			score--
 		}
 
@@ -255,6 +251,30 @@ func (q *Quiz) StartRound(
 	q.InProgress = true
 
 	return q.CurrentRound, nil
+}
+
+func (q *Quiz) SortedScore() map[string]int {
+	type score struct {
+		name   string
+		points int
+	}
+
+	var ss []score
+	for k, v := range q.Scoreboard {
+		ss = append(ss, score{k, v})
+	}
+
+	// sort winners by points for top 3
+	sort.Slice(ss, func(i, j int) bool {
+		return ss[i].points > ss[j].points
+	})
+
+	// update leaderboard at the end of the quiz with all users' points
+	data := map[string]int{}
+	for _, score := range ss {
+		data[score.name] = score.points
+	}
+	return data
 }
 
 func (r *Round) NewParticipant(username string, answer int, time int64) bool {
