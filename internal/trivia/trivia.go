@@ -79,7 +79,7 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz
 	client := &http.Client{}
 	resp, err := client.Get(fmt.Sprintf("%s/api_token.php?command=request", baseURL))
 	if err != nil {
-		return nil, fmt.Errorf("failed to request token: %v", err)
+		return nil, fmt.Errorf("failed to request token: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -89,7 +89,7 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read token response body: %v", err)
+		return nil, fmt.Errorf("failed to read token response body: %w", err)
 	}
 
 	tokenRes := struct {
@@ -97,17 +97,17 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz
 	}{}
 
 	if err = json.Unmarshal(body, &tokenRes); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal token: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal token: %w", err)
 	}
 
 	u, err := url.Parse(fmt.Sprintf("%s/api.php", baseURL))
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse url: %v", err)
+		return nil, fmt.Errorf("failed to parse url: %w", err)
 	}
 
 	q, err := url.ParseQuery(u.RawQuery)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse query: %v", err)
+		return nil, fmt.Errorf("failed to parse query: %w", err)
 	}
 
 	q.Add("token", tokenRes.Token)
@@ -125,7 +125,7 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz
 
 	quiz.logger.Info("new quiz created, creating new series of rounds")
 	if err = quiz.newSeries(); err != nil {
-		return nil, fmt.Errorf("error creating new quiz: %v", err)
+		return nil, fmt.Errorf("error creating new quiz: %w", err)
 	}
 
 	return quiz, nil
@@ -134,7 +134,7 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz
 func (q *Quiz) newSeries() error {
 	resp, err := q.client.Get(q.url)
 	if err != nil {
-		return fmt.Errorf("failed to get api data: %v", err)
+		return fmt.Errorf("failed to get api data: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -144,12 +144,12 @@ func (q *Quiz) newSeries() error {
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read api response body: %v", err)
+		return fmt.Errorf("failed to read api response body: %w", err)
 	}
 
 	var resultsResp response
 	if err = json.Unmarshal(body, &resultsResp); err != nil {
-		return fmt.Errorf("failed to unmarshal api response body: %v", err)
+		return fmt.Errorf("failed to unmarshal api response body: %w", err)
 	}
 
 	if len(resultsResp.Results) == 0 {

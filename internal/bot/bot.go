@@ -38,7 +38,7 @@ func New(logger *zap.SugaredLogger, url, jwt string) (*Bot, error) {
 			},
 		})
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial %s: %v", url, err)
+		return nil, fmt.Errorf("failed to dial %s: %w", url, err)
 	}
 
 	logger.Debugw("dialed server", "url", url)
@@ -50,7 +50,7 @@ func (b *Bot) Send(msg string) error {
 		Data: strings.ReplaceAll(html.UnescapeString(msg), "\"", "'"),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal output msg: %v", err)
+		return fmt.Errorf("failed to marshal output message: %w", err)
 	}
 
 	if err = b.send(fmt.Sprintf("MSG %s", string(marsha))); err != nil {
@@ -66,7 +66,7 @@ func (b *Bot) SendPriv(msg, user string) error {
 		User: user,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal output msg: %v", err)
+		return fmt.Errorf("failed to marshal output message: %w", err)
 	}
 
 	if err = b.send(fmt.Sprintf("PRIVMSG %s", string(marsha))); err != nil {
@@ -122,22 +122,22 @@ func (b *Bot) Run() error {
 
 			msg, err := parseMsg(raw)
 			if err != nil {
-				b.logger.Infow("failed to parse msg", "err", err)
+				b.logger.Infow("failed to parse message", "err", err)
 				continue
 			}
 
-			b.logger.Debugw("parsed msg", "msg", msg)
+			b.logger.Debugw("parsed message", "msg", msg)
 			switch msg.Kind {
 			case "MSG":
 				for _, f := range b.onMsgFuncs {
 					if err = f(ctx, msg); err != nil {
-						return fmt.Errorf("on message func err: %v", err)
+						return fmt.Errorf("on message func err: %w", err)
 					}
 				}
 			case "PRIVMSG":
 				for _, f := range b.onPrivMsgFuncs {
 					if err = f(ctx, msg); err != nil {
-						return fmt.Errorf("on private message func err: %v", err)
+						return fmt.Errorf("on private message func err: %w", err)
 					}
 				}
 			default:
@@ -147,7 +147,7 @@ func (b *Bot) Run() error {
 	})
 
 	if err := eg.Wait(); err != nil {
-		return fmt.Errorf("failure while running: %v", err)
+		return fmt.Errorf("failure while running: %w", err)
 	}
 
 	return nil
@@ -162,7 +162,7 @@ func parseMsg(raw string) (*Msg, error) {
 	if strings.HasPrefix(raw, "ERR") {
 		value, err := strconv.Unquote(raw[4:])
 		if err != nil {
-			return nil, fmt.Errorf("failed to unquote string: %v", err)
+			return nil, fmt.Errorf("failed to unquote string: %w", err)
 		}
 		return nil, fmt.Errorf("server returned error: %s", value)
 	}
@@ -171,22 +171,22 @@ func parseMsg(raw string) (*Msg, error) {
 	var content map[string]interface{}
 	var err error
 	if err = json.Unmarshal([]byte(data[1]), &content); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal content: %v %v", data[1], err)
+		return nil, fmt.Errorf("failed to unmarshal content: %v %w", data[1], err)
 	}
 
 	out := &Msg{Kind: data[0]}
 	if out.Kind == "MSG" || out.Kind == "PRIVMSG" {
 		if err = json.Unmarshal([]byte(data[1]), out); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal msg: %v %v", data[1], err)
+			return nil, fmt.Errorf("failed to unmarshal message: %v %w", data[1], err)
 		}
 	}
 	return out, nil
 }
 
 func (b *Bot) send(msg string) error {
-	b.logger.Debugw("sending msg", "msg", msg)
+	b.logger.Debugw("sending message", "msg", msg)
 	if err := b.conn.Write(context.Background(), websocket.MessageText, []byte(msg)); err != nil {
-		return fmt.Errorf("failed to write message: %v", err)
+		return fmt.Errorf("failed to write message: %w", err)
 	}
 	return nil
 }

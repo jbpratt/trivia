@@ -29,18 +29,18 @@ func New(
 ) (*TriviaBot, error) {
 	quiz, err := trivia.NewDefaultQuiz(logger)
 	if err != nil {
-		return nil, fmt.Errorf("error creating trivia: %v", err)
+		return nil, fmt.Errorf("error creating trivia: %w", err)
 	}
 
 	bot, err := bot.New(logger, wsURL, wsJWT)
 	if err != nil {
-		return nil, fmt.Errorf("error creating bot: %v", err)
+		return nil, fmt.Errorf("error creating bot: %w", err)
 	}
 
 	var lboard *trivia.Leaderboard
 	lboard, err = trivia.NewLeaderboard(logger, path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to init leaderboard: %v", err)
+		return nil, fmt.Errorf("failed to init leaderboard: %w", err)
 	}
 
 	t := &TriviaBot{logger, bot, quiz, lboard, 0}
@@ -65,14 +65,14 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 		if err := t.bot.Send(
 			"Start a new round with `trivia start`. PM the number beside the answer `/w trivia 2`",
 		); err != nil {
-			return fmt.Errorf("failed to send help msg: %v", err)
+			return fmt.Errorf("failed to send help msg: %w", err)
 		}
 	}
 
 	if strings.Contains(msg.Data, "start") || strings.Contains(msg.Data, "new") {
 		if t.quiz.InProgress {
 			if err := t.bot.Send("a quiz is already in progress"); err != nil {
-				return fmt.Errorf("failed to send quiz in progress msg: %v", err)
+				return fmt.Errorf("failed to send quiz in progress msg: %w", err)
 			}
 		}
 
@@ -87,7 +87,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 		if !t.quiz.InProgress {
 			t.quiz, err = trivia.NewDefaultQuiz(t.logger)
 			if err != nil {
-				return fmt.Errorf("failed to create a new quiz: %v", err)
+				return fmt.Errorf("failed to create a new quiz: %w", err)
 			}
 		}
 
@@ -128,7 +128,7 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 	t.logger.Info("starting quiz")
 	round, err := t.quiz.StartRound(t.onRoundCompletion)
 	if err != nil {
-		return fmt.Errorf("failed to start the round: %v", err)
+		return fmt.Errorf("failed to start the round: %w", err)
 	}
 
 	if err = t.bot.Send("Quiz starting soon! PM the number beside the answer. First 3 in get awarded points."); err != nil {
@@ -138,7 +138,7 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 	time.Sleep(10 * time.Second)
 
 	if err = t.runRound(ctx, round); err != nil {
-		return fmt.Errorf("error running round: %v", err)
+		return fmt.Errorf("error running round: %w", err)
 	}
 
 	// continue running rounds
@@ -146,11 +146,11 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 		t.logger.Infof("running next round %d", round.Num)
 		round, err = t.quiz.StartRound(t.onRoundCompletion)
 		if err != nil {
-			return fmt.Errorf("failed to start the round: %v", err)
+			return fmt.Errorf("failed to start the round: %w", err)
 		}
 
 		if err = t.runRound(ctx, round); err != nil {
-			return fmt.Errorf("error running round: %v", err)
+			return fmt.Errorf("error running round: %w", err)
 		}
 
 		// break early before sleeping
@@ -187,7 +187,7 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 		}
 
 		if err = t.leaderboard.Update(data); err != nil {
-			return fmt.Errorf("failed to update leaderboard: %v", err)
+			return fmt.Errorf("failed to update leaderboard: %w", err)
 		}
 	}
 
@@ -209,7 +209,7 @@ func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
 
 	t.logger.Infow("running round and waiting for completion", "output", output)
 	if err := t.bot.Send(output); err != nil {
-		return fmt.Errorf("failed to send round start msgs: %v", err)
+		return fmt.Errorf("failed to send round start msgs: %w", err)
 	}
 
 	for {
@@ -241,7 +241,7 @@ func (t *TriviaBot) onRoundCompletion(correct string, score []*trivia.Participan
 
 	t.logger.Info(output)
 	if err := t.bot.Send(output); err != nil {
-		return fmt.Errorf("failed to send round completion msg: %v", err)
+		return fmt.Errorf("failed to send round completion msg: %w", err)
 	}
 
 	return nil

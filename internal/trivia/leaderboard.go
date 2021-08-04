@@ -30,11 +30,11 @@ type Leaderboard struct {
 func NewLeaderboard(logger *zap.SugaredLogger, path string) (*Leaderboard, error) {
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open DB(%s): %v", path, err)
+		return nil, fmt.Errorf("failed to open DB(%s): %w", path, err)
 	}
 
 	if _, err = db.ExecContext(context.Background(), initSql); err != nil {
-		return nil, fmt.Errorf("failed to run init sql: %v", err)
+		return nil, fmt.Errorf("failed to run init sql: %w", err)
 	}
 
 	boil.SetDB(db)
@@ -54,7 +54,7 @@ func (l *Leaderboard) Update(entries map[string]int) error {
 	ctx := context.Background()
 	tx, err := l.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %v", err)
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
 	for name, points := range entries {
@@ -63,13 +63,13 @@ func (l *Leaderboard) Update(entries map[string]int) error {
 
 		exists, err = models.Users(models.UserWhere.Name.EQ(name)).ExistsG(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to determine if user exists: %v", err)
+			return fmt.Errorf("failed to determine if user exists: %w", err)
 		}
 
 		if exists {
 			user, err = models.Users(models.UserWhere.Name.EQ(name)).OneG(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to get user(%s): %v", name, err)
+				return fmt.Errorf("failed to get user(%s): %w", name, err)
 			}
 
 			l.logger.Infof("found user to update: %v", user)
@@ -77,7 +77,7 @@ func (l *Leaderboard) Update(entries map[string]int) error {
 			user.Points += int64(points)
 			user.GamesPlayed++
 			if _, err = user.UpdateG(ctx, boil.Infer()); err != nil {
-				return fmt.Errorf("failed to update user: %v", err)
+				return fmt.Errorf("failed to update user: %w", err)
 			}
 		} else {
 			user = &models.User{
@@ -88,13 +88,13 @@ func (l *Leaderboard) Update(entries map[string]int) error {
 			}
 			l.logger.Infof("inserting new user: %v", user)
 			if err = user.InsertG(ctx, boil.Infer()); err != nil {
-				return fmt.Errorf("failed to insert new user: %v", err)
+				return fmt.Errorf("failed to insert new user: %w", err)
 			}
 		}
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %v", err)
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil
