@@ -1,0 +1,28 @@
+name: CD - strimssend
+
+on:
+  push:
+    paths:
+      - 'cmd/strimssend/*'
+      - 'internal/strimssend*'
+      - 'internal/bot/*'
+    branches: [ main ]
+
+jobs:
+
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Registry login
+      env:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      run: podman login ghcr.io -u ${username} -p ${password}
+
+    - name: Build image
+      run: podman build -f strimssend.Dockerfile -t ghcr.io/jbpratt/strimssend:latest
+
+    - name: Publish image
+      run: podman push ghcr.io/jbpratt/strimssend:latest

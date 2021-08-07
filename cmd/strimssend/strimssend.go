@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/jbpratt/bots/internal/strimssend"
 	"go.uber.org/zap"
@@ -12,16 +13,17 @@ import (
 func main() {
 	serverURL := "wss://chat.strims.gg/ws"
 	dev := flag.Bool("dev", false, "use chat2")
-	msg := flag.String("msg", "", "message to send")
-
 	flag.Parse()
+
+	args := flag.Args()
+	if len(args) < 1 {
+		log.Fatal("supply a message to send")
+	}
+
+	msg := strings.Join(args, " ")
 
 	if *dev {
 		serverURL = "wss://chat2.strims.gg/ws"
-	}
-
-	if *msg == "" {
-		log.Fatal("-msg flag is required")
 	}
 
 	logger, err := zap.NewProduction()
@@ -46,7 +48,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err = ss.Send(*msg); err != nil {
+	if err = ss.Send(msg); err != nil {
 		log.Fatal(err)
 	}
 }
