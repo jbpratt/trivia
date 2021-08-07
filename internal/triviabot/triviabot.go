@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/jbpratt/bots/internal/bot"
 	"github.com/jbpratt/bots/internal/trivia"
 	"go.uber.org/zap"
@@ -21,11 +22,17 @@ type TriviaBot struct {
 	lastQuizEndedAt int64
 }
 
+var (
+	failureEmotes = []string{"TANTIES", "JimFace", "DuckerZ"}
+	successEmotes = []string{""}
+)
+
 func New(
 	logger *zap.SugaredLogger,
 	url, jwt, path string,
 	duration time.Duration,
 ) (*TriviaBot, error) {
+
 	quiz, err := trivia.NewDefaultQuiz(logger)
 	if err != nil {
 		return nil, fmt.Errorf("error creating trivia: %w", err)
@@ -68,9 +75,14 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 		}
 	}
 
+	// TODO: when someone answer in public chat, send PM instructing user how to
+	// properly answer
+	// if t.quiz.InProgress {
+	// }
+
 	if strings.Contains(msg.Data, "start") || strings.Contains(msg.Data, "new") {
 		if t.quiz.InProgress {
-			if err := t.bot.Send("a quiz is already in progress JimFace"); err != nil {
+			if err := t.bot.Send(fmt.Sprintf("a quiz is already in progress %s", "")); err != nil {
 				return fmt.Errorf("failed to send quiz in progress msg: %w", err)
 			}
 			return nil
@@ -78,6 +90,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 
 		fiveMinAgo := time.Now().Add(-5 * time.Minute).UnixNano()
 		if fiveMinAgo < t.lastQuizEndedAt && !strings.Contains(msg.Data, "force") {
+			// TODO: send how much longer we are on cooldown for
 			if err := t.bot.Send("on cooldown PepoSleep"); err != nil {
 				return fmt.Errorf("failed to send quiz in progress msg: %w", err)
 			}
@@ -108,7 +121,7 @@ func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 	if t.quiz.InProgress {
 		answer, err := strconv.Atoi(msg.Data)
 		if err != nil {
-			if err := t.bot.SendPriv(
+			if err = t.bot.SendPriv(
 				"Invalid answer, PM the number of the answer",
 				msg.User,
 			); err != nil {
@@ -117,7 +130,7 @@ func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 		}
 
 		if !t.quiz.CurrentRound.NewParticipant(msg.User, answer-1, msg.Time) {
-			if err := t.bot.SendPriv("you have already submitted an answer!", msg.User); err != nil {
+			if err = t.bot.SendPriv("you have already submitted an answer!", msg.User); err != nil {
 				return nil
 			}
 		}
@@ -137,7 +150,8 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 		return fmt.Errorf("failed to start the round: %w", err)
 	}
 
-	if err = t.bot.Send("Quiz starting soon! PM the number beside the answer. First 3 in get awarded points."); err != nil {
+	output := "Quiz starting soon! PM the number beside the answer. First 3 correct answers are awarded points."
+	if err = t.bot.Send(output); err != nil {
 		return fmt.Errorf("failed to send starting message: %w", err)
 	}
 
@@ -158,28 +172,21 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 		if err = t.runRound(ctx, round); err != nil {
 			return fmt.Errorf("error running round: %w", err)
 		}
-
-		// break early before sleeping
-		if round.NextRound == nil {
-			break
-		}
-
-		t.logger.Info("sleeping for 10 seconds until next round")
-		time.Sleep(10 * time.Second)
 	}
 
-	output := "Quiz complete! Winners: "
+	time.Sleep(5 * time.Second)
+
+	output = "Quiz complete! Winners: "
 	if len(t.quiz.Scoreboard) == 0 {
 		output += "No one! DuckerZ"
 	} else {
 		ss := t.quiz.SortedScore()
-
 		limit := 3
 		for name, points := range ss {
 			if limit == 0 {
 				break
 			}
-			output += fmt.Sprintf("%s - %d point(s) ", name, points)
+			output += fmt.Sprintf("`%s +%d point(s)` ", name, points)
 			limit--
 		}
 
@@ -192,12 +199,19 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 }
 
 func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
+	if round.NextRound != nil {
+		defer func() {
+			t.logger.Info("sleeping for 25 seconds until next round")
+			time.Sleep(25 * time.Second)
+		}()
+	}
+
 	leading := fmt.Sprintf("Round %d", round.Num)
 	if round.NextRound == nil {
 		leading = "Final round"
 	}
 
-	output := fmt.Sprintf("%s, PM the number. %q (%s). Question: `%s` Answers:", leading, round.Category, round.Difficulty, round.Question)
+	output := fmt.Sprintf("%s: %q (%s). `%s` ", leading, round.Category, round.Difficulty, round.Question)
 
 	// answers have already been shuffled
 	for idx, ans := range round.Answers {
@@ -214,26 +228,25 @@ func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
 			t.logger.Info("round is no longer in progress.. breaking")
 			break
 		}
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	return nil
 }
 
 func (t *TriviaBot) onRoundCompletion(correct string, score []*trivia.Participant) error {
-	// Delay the start of the next round
-	defer time.Sleep(10 * time.Second)
-
-	output := fmt.Sprintf("Round complete! Answer: %s", correct)
+	output := fmt.Sprintf("Round complete! The correct answer is %s.", correct)
 	if len(score) == 0 {
 		return t.bot.Send(output + " No one answered correctly DuckerZ")
 	}
 
-	output += " Winners:"
 	for i := 0; i < len(score) && i <= 2; i++ {
-		output += fmt.Sprintf(" %d: %s", i+1, score[i].Name)
+		output += fmt.Sprintf(" %s %s", humanize.Ordinal(i+1), score[i].Name)
 
-		//	timeDiff := score[i].TimeIn - score[i-1].TimeIn
-		//	output += fmt.Sprintf(" +%d", timeDiff)
+		if len(score) >= 2 && i > 0 {
+			timeDiff := time.Unix(score[i].TimeIn-score[i-1].TimeIn, 0)
+			output += fmt.Sprintf(" +%s", humanize.Time(timeDiff))
+		}
 	}
 
 	t.logger.Info(output)
