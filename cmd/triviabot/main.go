@@ -20,7 +20,7 @@ func main() {
 		serverURL = "wss://chat2.strims.gg/ws"
 	}
 
-	logger, err := zap.NewDevelopment()
+	logger, err := zap.NewProduction()
 	if err != nil {
 		log.Fatal(err)
 	}
