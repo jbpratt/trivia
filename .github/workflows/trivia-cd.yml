@@ -21,8 +21,12 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
       run: podman login ghcr.io -u ${username} -p ${password}
 
-    - name: Build image
-      run: podman build --build-arg BOT=triviabot -f Dockerfile -t ghcr.io/jbpratt/triviabot:latest
+    - name: Build images
+      run: |
+        podman build --build-arg BOT=triviabot -f Dockerfile -t ghcr.io/jbpratt/triviabot:latest
+        podman build --build-arg BOT=triviabot -f arm64.Dockerfile -t ghcr.io/jbpratt/triviabot:arm
 
     - name: Publish image
-      run: podman push ghcr.io/jbpratt/triviabot:latest
+      run: |
+        podman push ghcr.io/jbpratt/triviabot:latest
+        podman push ghcr.io/jbpratt/triviabot:arm
