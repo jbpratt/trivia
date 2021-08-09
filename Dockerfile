@@ -11,4 +11,4 @@ RUN go build -o /go/bin/bot ./cmd/${BOT}/
 
 FROM gcr.io/distroless/base-debian10
 COPY --from=build /go/bin/bot /
-CMD ["/bot"]
+ENTRYPOINT ["/bot"]
