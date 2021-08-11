@@ -48,6 +48,4 @@ func main() {
 	}
 }
 
-// accept duration and category and difficulty
-// -- can we do this with flag.FlagSet?
 // show time difference in between pole positions

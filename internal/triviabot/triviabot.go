@@ -57,7 +57,8 @@ func (t *TriviaBot) Run() error {
 }
 
 func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
-	// TODO: can we use a FlagSet for parsing commands?
+	// TODO: implement a FlagSet that allows passing in of quiz properties
+	// start: -duration, -category, -difficulty, -force
 
 	if !strings.HasPrefix(msg.Data, "trivia") && !strings.HasPrefix(msg.Data, "!trivia") {
 		return nil
@@ -242,14 +243,18 @@ func (t *TriviaBot) onRoundCompletion(correct string, score []*trivia.Participan
 		return t.bot.Send(output)
 	}
 
+	var line string
+	entries := []string{}
 	for i := 0; i < len(score) && i <= 2; i++ {
-		output += fmt.Sprintf(" %s %s", humanize.Ordinal(i+1), score[i].Name)
+		line = fmt.Sprintf("%s %s", humanize.Ordinal(i+1), score[i].Name)
 
 		// if len(score) >= 2 && i > 0 {
-		// timeDiff := time.Unix(score[i].TimeIn, 0).Sub(time.Unix(score[i-1].TimeIn, 0))
-		// output += fmt.Sprintf(" +%s", timeDiff)
+		//	timeDiff := time.Unix(0, score[i].TimeIn).Sub(time.Unix(0, score[i-1].TimeIn))
+		//	line += fmt.Sprintf(" (+%s)", timeDiff.Round(time.Millisecond))
 		// }
+		entries = append(entries, line)
 	}
 
+	output += english.OxfordWordSeries(entries, "and")
 	return t.bot.Send(output)
 }
