@@ -22,7 +22,7 @@ jobs:
       run: podman login ghcr.io -u ${username} -p ${password}
 
     - name: Build image
-      run: podman build --build-arg BOT=strimssend -f Dockerfile -t ghcr.io/jbpratt/strimssend:latest
+      run: podman build --build-arg BOT=strimssend -f misc/Dockerfile -t ghcr.io/jbpratt/strimssend:latest
 
     - name: Publish image
       run: podman push ghcr.io/jbpratt/strimssend:latest

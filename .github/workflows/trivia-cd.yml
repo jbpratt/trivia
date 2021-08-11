@@ -23,8 +23,8 @@ jobs:
 
     - name: Build images
       run: |
-        podman build --build-arg BOT=triviabot -f Dockerfile -t ghcr.io/jbpratt/triviabot:latest
-        podman build --build-arg BOT=triviabot -f arm64.Dockerfile -t ghcr.io/jbpratt/triviabot:arm
+        podman build --build-arg BOT=triviabot -f misc/Dockerfile -t ghcr.io/jbpratt/triviabot:latest
+        podman build --build-arg BOT=triviabot -f misc/arm64.Dockerfile -t ghcr.io/jbpratt/triviabot:arm
 
     - name: Publish image
       run: |

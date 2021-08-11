@@ -1,0 +1,37 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: triviabot
+  labels:
+    app: triviabot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: triviabot
+  template:
+    metadata:
+      labels:
+        app: triviabot
+    spec:
+      volumes:
+        - name: trivia-pv-storage
+          persistentVolumeClaim:
+            claimName: triviabot-pv-claim
+      containers:
+      - command:
+        - /bot
+        env:
+        - name: STRIMS_CHAT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: triviabot
+              key: token
+        image: ghcr.io/jbpratt/triviabot:arm
+        imagePullPolicy: Always
+        name: triviabot
+        volumeMounts:
+        - mountPath: /tmp
+          name: trivia-pv-storage
+        workingDir: /
