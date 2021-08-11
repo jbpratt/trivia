@@ -63,9 +63,9 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 		return nil
 	}
 
-	if strings.Contains(msg.Data, "help") {
+	if strings.Contains(msg.Data, "help") || strings.Contains(msg.Data, "info") {
 		if err := t.bot.Send(
-			"Start a new round with `trivia start`. PM the number beside the answer `/w trivia 2`",
+			"Start a new round with `trivia start`. Whisper me the number beside the answer `/w trivia 2`. Data comes from https://opentdb.com/ which you can submit new questions to!",
 		); err != nil {
 			return fmt.Errorf("failed to send help msg: %w", err)
 		}
@@ -122,13 +122,17 @@ func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 				"Invalid answer, PM the number of the answer",
 				msg.User,
 			); err != nil {
-				return nil
+				return err
 			}
 		}
 
 		if !t.quiz.CurrentRound.NewParticipant(msg.User, answer-1, msg.Time) {
 			if err = t.bot.SendPriv("you have already submitted an answer!", msg.User); err != nil {
-				return nil
+				return err
+			}
+		} else {
+			if err = t.bot.SendPriv("NODDERS your answer has been noted", msg.User); err != nil {
+				return err
 			}
 		}
 	}

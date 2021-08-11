@@ -54,7 +54,7 @@ func (b *Bot) Send(msg string) error {
 	}
 
 	if err = b.send(fmt.Sprintf("MSG %s", string(marsha))); err != nil {
-		return err
+		return fmt.Errorf("failed to send message %q: %w", msg, err)
 	}
 
 	return nil
@@ -70,7 +70,7 @@ func (b *Bot) SendPriv(msg, user string) error {
 	}
 
 	if err = b.send(fmt.Sprintf("PRIVMSG %s", string(marsha))); err != nil {
-		return err
+		return fmt.Errorf("failed to priv send message %q to %q: %w", msg, user, err)
 	}
 
 	return nil
@@ -103,7 +103,7 @@ func (b *Bot) Run() error {
 		for {
 			_, data, err := b.conn.Read(ctx)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed while reading message: %w", err)
 			}
 			b.logger.Debugw("message read", "msg", string(data))
 			rawMsgs <- string(data)
