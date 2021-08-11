@@ -19,6 +19,7 @@ type Bot struct {
 	logger         *zap.SugaredLogger
 	conn           *websocket.Conn
 	msgs           chan Msg
+	lastSentMsg    string
 	onMsgFuncs     []func(context.Context, *Msg) error
 	onPrivMsgFuncs []func(context.Context, *Msg) error
 }
@@ -42,10 +43,14 @@ func New(logger *zap.SugaredLogger, url, jwt string) (*Bot, error) {
 	}
 
 	logger.Debugw("dialed server", "url", url)
-	return &Bot{logger, c, nil, nil, nil}, nil
+	return &Bot{logger, c, nil, "", nil, nil}, nil
 }
 
 func (b *Bot) Send(msg string) error {
+	if msg == b.lastSentMsg {
+		msg += " ."
+	}
+
 	marsha, err := json.Marshal(&Msg{
 		Data: strings.ReplaceAll(html.UnescapeString(msg), "\"", "'"),
 	})
@@ -56,6 +61,8 @@ func (b *Bot) Send(msg string) error {
 	if err = b.send(fmt.Sprintf("MSG %s", string(marsha))); err != nil {
 		return fmt.Errorf("failed to send message %q: %w", msg, err)
 	}
+
+	b.lastSentMsg = msg
 
 	return nil
 }
