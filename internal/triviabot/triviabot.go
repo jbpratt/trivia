@@ -86,9 +86,8 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 
 		fiveMinAgo := time.Now().Add(-5 * time.Minute)
 		if t.lastQuizEndedAt.After(fiveMinAgo) && !strings.Contains(msg.Data, "force") {
-			// TODO: send how much longer we are on cooldown for
-			// timeLeft := t.lastQuizEndedAt.Sub(fiveMinAgo)
-			if err := t.bot.Send("on cooldown PepoSleep"); err != nil {
+			timeLeft := t.lastQuizEndedAt.Sub(fiveMinAgo).Round(time.Second)
+			if err := t.bot.Send(fmt.Sprintf("on cooldown for %s PepoSleep", timeLeft)); err != nil {
 				return fmt.Errorf("failed to send quiz in progress msg: %w", err)
 			}
 			return nil
@@ -131,7 +130,7 @@ func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 				return err
 			}
 		} else {
-			if err = t.bot.SendPriv("NODDERS your answer has been noted", msg.User); err != nil {
+			if err = t.bot.SendPriv("your answer has been recorded", msg.User); err != nil {
 				return err
 			}
 		}
@@ -207,7 +206,8 @@ func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
 		leading = "Final round"
 	}
 
-	output := fmt.Sprintf("%s: %q (%s). `%s` ", leading, round.Category, round.Difficulty, round.Question)
+	question := strings.ReplaceAll(round.Question, "`", "'")
+	output := fmt.Sprintf("%s: %q (%s). `%s` ", leading, round.Category, round.Difficulty, question)
 
 	// answers have already been shuffled
 	for idx, ans := range round.Answers {
@@ -232,20 +232,24 @@ func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
 
 func (t *TriviaBot) onRoundCompletion(correct string, score []*trivia.Participant) error {
 	output := fmt.Sprintf("Round complete! The correct answer is %s.", correct)
+	defer func() {
+		t.lastQuizEndedAt = time.Now()
+		t.logger.Info(output)
+	}()
+
 	if len(score) == 0 {
-		return t.bot.Send(output + " No one answered correctly DuckerZ")
+		output += " No one answered correctly DuckerZ"
+		return t.bot.Send(output)
 	}
 
 	for i := 0; i < len(score) && i <= 2; i++ {
 		output += fmt.Sprintf(" %s %s", humanize.Ordinal(i+1), score[i].Name)
 
 		// if len(score) >= 2 && i > 0 {
-		// 	timeDiff := time.Unix(score[i].TimeIn-score[i-1].TimeIn, 0)
-		// 	output += fmt.Sprintf(" +%s", humanize.Time(timeDiff))
+		// timeDiff := time.Unix(score[i].TimeIn, 0).Sub(time.Unix(score[i-1].TimeIn, 0))
+		// output += fmt.Sprintf(" +%s", timeDiff)
 		// }
 	}
 
-	t.logger.Info(output)
-	t.lastQuizEndedAt = time.Now()
 	return t.bot.Send(output)
 }
