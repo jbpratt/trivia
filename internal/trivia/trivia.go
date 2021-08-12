@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -33,6 +34,7 @@ type Round struct {
 	Category     string
 	Difficulty   string
 	Question     string
+	Type         string
 	Answers      []*Answer
 	Participants []*Participant
 	Complete     bool
@@ -160,6 +162,7 @@ func (q *Quiz) newSeries() error {
 			Category:   result.Category,
 			Difficulty: result.Difficulty,
 			Question:   result.Question,
+			Type:       result.Type,
 			Answers: []*Answer{
 				{result.CorrectAnswer, true},
 			},
@@ -208,11 +211,20 @@ func (q *Quiz) StartRound(
 		}
 	}
 
-	q.logger.Infow("determined round.. shuffling answers", "question", q.CurrentRound.Question)
+	q.logger.Infow("determined round...", "question", q.CurrentRound.Question)
 
-	rand.Shuffle(len(q.CurrentRound.Answers), func(i, j int) {
-		q.CurrentRound.Answers[i], q.CurrentRound.Answers[j] = q.CurrentRound.Answers[j], q.CurrentRound.Answers[i]
-	})
+	if q.CurrentRound.Type == "boolean" {
+		for idx, answer := range q.CurrentRound.Answers {
+			if strings.ToLower(answer.Value) == "true" && idx != 0 {
+				q.CurrentRound.Answers[idx-1], q.CurrentRound.Answers[idx] = q.CurrentRound.Answers[idx], q.CurrentRound.Answers[idx-1]
+				break
+			}
+		}
+	} else {
+		rand.Shuffle(len(q.CurrentRound.Answers), func(i, j int) {
+			q.CurrentRound.Answers[i], q.CurrentRound.Answers[j] = q.CurrentRound.Answers[j], q.CurrentRound.Answers[i]
+		})
+	}
 
 	q.Timer = time.AfterFunc(q.duration, func() {
 		q.logger.Info("time is up!")

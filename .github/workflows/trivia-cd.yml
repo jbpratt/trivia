@@ -4,7 +4,8 @@ on:
   push:
     paths:
       - 'cmd/triviabot/*'
-      - 'internal/trivia*'
+      - 'internal/trivia/*'
+      - 'internal/triviabot/*'
       - 'internal/bot/*'
     branches: [ main ]
 
