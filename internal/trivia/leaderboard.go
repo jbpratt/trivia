@@ -104,10 +104,19 @@ func (l *Leaderboard) Highscores(limit int) (models.UserSlice, error) {
 	l.rw.RLock()
 	defer l.rw.RUnlock()
 
+	ctx := context.Background()
+	if limit == 0 {
+		size, err := models.Users().CountG(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get count of users: %w", err)
+		}
+		limit = int(size)
+	}
+
 	return models.Users(
-		models.UserWhere.Points.GT(0),
-		qm.Select(models.UserColumns.Name, models.UserColumns.Points),
-		qm.OrderBy(models.UserColumns.Points),
+		models.UserWhere.GamesPlayed.GT(0),
+		qm.Select(models.UserColumns.Name, models.UserColumns.Points, models.UserColumns.GamesPlayed),
+		qm.OrderBy("points desc"),
 		qm.Limit(limit),
-	).AllG(context.Background())
+	).AllG(ctx)
 }

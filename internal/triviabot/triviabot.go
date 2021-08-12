@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -12,27 +16,25 @@ import (
 	"github.com/dustin/go-humanize/english"
 	"github.com/jbpratt/bots/internal/bot"
 	"github.com/jbpratt/bots/internal/trivia"
+	"github.com/jbpratt/bots/internal/trivia/leaderboard/models"
 	"go.uber.org/zap"
 )
 
 type TriviaBot struct {
-	logger          *zap.SugaredLogger
-	bot             *bot.Bot
-	quiz            *trivia.Quiz
-	leaderboard     *trivia.Leaderboard
-	lastQuizEndedAt time.Time
+	logger                   *zap.SugaredLogger
+	bot                      *bot.Bot
+	quiz                     *trivia.Quiz
+	leaderboard              *trivia.Leaderboard
+	lastQuizEndedAt          time.Time
+	lastTemplatedLeadboardAt time.Time
+	leaderboardOutputPath    string
 }
 
 func New(
 	logger *zap.SugaredLogger,
-	url, jwt, path string,
+	url, jwt, dbPath, lboardOutputPath string,
 	duration time.Duration,
 ) (*TriviaBot, error) {
-
-	quiz, err := trivia.NewDefaultQuiz(logger)
-	if err != nil {
-		return nil, fmt.Errorf("error creating trivia: %w", err)
-	}
 
 	bot, err := bot.New(logger, url, jwt)
 	if err != nil {
@@ -40,14 +42,23 @@ func New(
 	}
 
 	var lboard *trivia.Leaderboard
-	lboard, err = trivia.NewLeaderboard(logger, path)
+	lboard, err = trivia.NewLeaderboard(logger, dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init leaderboard: %w", err)
 	}
 
-	t := &TriviaBot{logger: logger, bot: bot, quiz: quiz, leaderboard: lboard}
+	t := &TriviaBot{
+		logger:                logger,
+		bot:                   bot,
+		leaderboard:           lboard,
+		leaderboardOutputPath: lboardOutputPath,
+	}
 	bot.OnMessage(t.onMsg)
 	bot.OnPrivMessage(t.onPrivMsg)
+
+	if err = t.generateLeaderboardPage(); err != nil {
+		return nil, fmt.Errorf("failed to generate page on startup: %w", err)
+	}
 
 	return t, nil
 }
@@ -77,8 +88,31 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 	// if t.quiz.InProgress {
 	// }
 
+	if strings.Contains(msg.Data, "leaderboard") || strings.Contains(msg.Data, "highscore") {
+		output := "https://jbpratt.xyz/leaderboard.html"
+		oneHourAgo := time.Now().Add(-1 * time.Hour)
+		if t.lastTemplatedLeadboardAt.After(oneHourAgo) {
+			timeLeft := t.lastTemplatedLeadboardAt.Sub(oneHourAgo).Round(time.Second)
+			if err := t.bot.Send(
+				fmt.Sprintf("Leaderboard generation is on cooldown for %s. %s", timeLeft, output),
+			); err != nil {
+				return fmt.Errorf("failed to send cooldown message: %w", err)
+			}
+			return nil
+		}
+
+		if err := t.generateLeaderboardPage(); err != nil {
+			return fmt.Errorf("failed to generated leaderboard: %w", err)
+		}
+
+		if err := t.bot.Send("New leaderboard generated at " + output); err != nil {
+			return fmt.Errorf("error sending leaderboard link: %w", err)
+		}
+		return nil
+	}
+
 	if strings.Contains(msg.Data, "start") || strings.Contains(msg.Data, "new") {
-		if t.quiz.InProgress {
+		if t.quiz != nil && t.quiz.InProgress {
 			if err := t.bot.Send("a quiz is already in progress"); err != nil {
 				return fmt.Errorf("failed to send quiz in progress msg: %w", err)
 			}
@@ -96,7 +130,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 
 		// TODO: allow for providing quiz size
 		var err error
-		if t.quiz.CurrentRound != nil && t.quiz.CurrentRound.NextRound == nil {
+		if t.quiz == nil || (t.quiz.CurrentRound != nil && t.quiz.CurrentRound.NextRound == nil) {
 			t.quiz, err = trivia.NewDefaultQuiz(t.logger)
 			if err != nil {
 				return fmt.Errorf("failed to create a new quiz: %w", err)
@@ -257,4 +291,72 @@ func (t *TriviaBot) onRoundCompletion(correct string, score []*trivia.Participan
 
 	output += english.OxfordWordSeries(entries, "and")
 	return t.bot.Send(output)
+}
+
+const tpl = `
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Strims Trivia Leaderboard</title>
+  </head>
+  <body>
+    <small>Generated at {{ .TemplatedAt.Format "Jan 02, 2006 15:04:05 UTC" }}</small>
+    <table>
+      <tr>
+        <th>Name</th>
+        <th>Points</th>
+        <th>Games played</th>
+      </tr>
+      {{range .Highscores}}
+      <tr>
+        <td>{{.Name}}</td>
+        <td>{{.Points}}</td>
+        <td>{{.GamesPlayed}}</td>
+      </tr>
+      {{end}}
+    </table>
+  </body>
+</html>`
+
+func (t *TriviaBot) generateLeaderboardPage() error {
+	highscores, err := t.leaderboard.Highscores(0)
+	if err != nil {
+		return fmt.Errorf("failed to get highscores: %w", err)
+	}
+
+	template, err := template.New("leaderboard").Parse(tpl)
+	if err != nil {
+		return fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	templatedAt := time.Now()
+
+	data := struct {
+		TemplatedAt time.Time
+		Highscores  []*models.User
+	}{
+		TemplatedAt: templatedAt,
+		Highscores:  highscores,
+	}
+
+	if err = os.MkdirAll(filepath.Dir(t.leaderboardOutputPath), fs.ModeDir); err != nil {
+		return fmt.Errorf("failed to create leaderbord output dir (%s): %w", t.leaderboardOutputPath, err)
+	}
+
+	file, err := os.Create(t.leaderboardOutputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create leaderboard html file: %w", err)
+	}
+
+	if err = template.Execute(file, data); err != nil {
+		return fmt.Errorf("failed to template page: %w", err)
+	}
+
+	if err = file.Close(); err != nil {
+		return fmt.Errorf("failed to close file: %w", err)
+	}
+
+	t.lastTemplatedLeadboardAt = templatedAt
+	return nil
 }

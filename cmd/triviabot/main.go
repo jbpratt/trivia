@@ -13,6 +13,7 @@ func main() {
 	serverURL := "wss://chat.strims.gg/ws"
 	dbPath := flag.String("db", "/tmp/trivia.db", "path to sqlite database")
 	dev := flag.Bool("dev", false, "use chat2")
+	leaderboardPage := flag.String("html", "/tmp/leaderboard/leaderboard.html", "path to output generated leaderboard page")
 
 	flag.Parse()
 
@@ -38,7 +39,7 @@ func main() {
 		logger.Fatal("must provide $STRIMS_CHAT_TOKEN")
 	}
 
-	triviabot, err := triviabot.New(logger.Sugar(), url, jwt, *dbPath, 15)
+	triviabot, err := triviabot.New(logger.Sugar(), url, jwt, *dbPath, *leaderboardPage, 15)
 	if err != nil {
 		logger.Fatal(err.Error())
 	}
