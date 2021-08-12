@@ -96,7 +96,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 
 		// TODO: allow for providing quiz size
 		var err error
-		if !t.quiz.InProgress {
+		if t.quiz.CurrentRound != nil && t.quiz.CurrentRound.NextRound == nil {
 			t.quiz, err = trivia.NewDefaultQuiz(t.logger)
 			if err != nil {
 				return fmt.Errorf("failed to create a new quiz: %w", err)
