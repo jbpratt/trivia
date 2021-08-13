@@ -233,11 +233,11 @@ func (q *Quiz) StartRound(
 		score := 3
 		roundScore := q.CurrentRound.DetermineWinners()
 		for _, v := range roundScore {
-			if score > 1 {
+			if score >= 1 {
 				q.Scoreboard[v.Name] += score * 2
 				score--
 			} else {
-				q.Scoreboard[v.Name] += score
+				q.Scoreboard[v.Name] += 1
 			}
 		}
 
