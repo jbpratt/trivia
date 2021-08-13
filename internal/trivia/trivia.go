@@ -296,6 +296,10 @@ func (r *Round) NewParticipant(username string, answer int, time int64) bool {
 		}
 	}
 
+	if answer >= len(r.Answers) {
+		return false
+	}
+
 	r.logger.Infow("new participant", "username", username, "answer", answer, "time", time)
 	r.Participants = append(r.Participants, &Participant{username, answer, time})
 	return true

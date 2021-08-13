@@ -153,19 +153,22 @@ func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 		answer, err := strconv.Atoi(msg.Data)
 		if err != nil {
 			if err = t.bot.SendPriv(
-				"Invalid answer, PM the number of the answer",
+				"Invalid answer, whisper the number of the answer. `/w trivia 2`",
 				msg.User,
 			); err != nil {
 				return err
 			}
+			return nil
 		}
 
 		if !t.quiz.CurrentRound.NewParticipant(msg.User, answer-1, msg.Time) {
-			if err = t.bot.SendPriv("you have already submitted an answer!", msg.User); err != nil {
+			if err = t.bot.SendPriv(
+				"Your answer is invalid or you have already submitted one!", msg.User,
+			); err != nil {
 				return err
 			}
 		} else {
-			if err = t.bot.SendPriv("your answer has been recorded", msg.User); err != nil {
+			if err = t.bot.SendPriv("Your answer has been submitted.", msg.User); err != nil {
 				return err
 			}
 		}
