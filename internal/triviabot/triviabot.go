@@ -307,12 +307,14 @@ const tpl = `
         <th>Name</th>
         <th>Points</th>
         <th>Games played</th>
+        <th>Points per game</th>
       </tr>
       {{range .Highscores}}
       <tr>
         <td>{{.Name}}</td>
         <td>{{.Points}}</td>
         <td>{{.GamesPlayed}}</td>
+        <td>{{divide .Points .GamesPlayed }} </td>
       </tr>
       {{end}}
     </table>
@@ -325,7 +327,11 @@ func (t *TriviaBot) generateLeaderboardPage() error {
 		return fmt.Errorf("failed to get highscores: %w", err)
 	}
 
-	template, err := template.New("leaderboard").Parse(tpl)
+	template, err := template.New("leaderboard").Funcs(template.FuncMap{
+		"divide": func(a, b int64) string {
+			return fmt.Sprintf("%g", float32(a)/float32(b))
+		},
+	}).Parse(tpl)
 	if err != nil {
 		return fmt.Errorf("failed to parse template: %w", err)
 	}
