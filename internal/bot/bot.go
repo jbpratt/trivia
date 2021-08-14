@@ -15,11 +15,25 @@ import (
 	"nhooyr.io/websocket"
 )
 
+type MsgTypeFilter string
+
+var (
+	MsgFilter         MsgTypeFilter = "MSG"
+	PrivMsgFilter     MsgTypeFilter = "PRIVMSG"
+	NamesFilter       MsgTypeFilter = "NAMES"
+	JoinFilter        MsgTypeFilter = "QUIT"
+	QuitFilter        MsgTypeFilter = "JOIN"
+	ViewerStateFilter MsgTypeFilter = "VIEWERSTATE"
+)
+
 type Bot struct {
 	logger         *zap.SugaredLogger
 	conn           *websocket.Conn
-	msgs           chan Msg
+	reconnect      bool
 	lastSentMsg    string
+	url            string
+	token          string
+	filters        []MsgTypeFilter
 	onMsgFuncs     []func(context.Context, *Msg) error
 	onPrivMsgFuncs []func(context.Context, *Msg) error
 }
@@ -31,7 +45,26 @@ type Msg struct {
 	Time int64  `json:"timestamp,omitempty"`
 }
 
-func New(logger *zap.SugaredLogger, url, jwt string) (*Bot, error) {
+func New(
+	logger *zap.SugaredLogger,
+	url, jwt string,
+	reconnect bool,
+	filters ...MsgTypeFilter,
+) (*Bot, error) {
+	b := &Bot{
+		logger:    logger,
+		reconnect: reconnect,
+		filters:   filters,
+		url:       url,
+		token:     jwt,
+	}
+	if err := b.dial(url, jwt); err != nil {
+		return nil, fmt.Errorf("failed to create bot: %w", err)
+	}
+	return b, nil
+}
+
+func (b *Bot) dial(url, jwt string) error {
 	c, _, err := websocket.Dial(context.Background(), url,
 		&websocket.DialOptions{
 			HTTPHeader: http.Header{
@@ -39,11 +72,12 @@ func New(logger *zap.SugaredLogger, url, jwt string) (*Bot, error) {
 			},
 		})
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial %s: %w", url, err)
+		return fmt.Errorf("failed to dial %s: %w", url, err)
 	}
 
-	logger.Debugw("dialed server", "url", url)
-	return &Bot{logger, c, nil, "", nil, nil}, nil
+	b.conn = c
+	b.logger.Debugw("dialed server", "url", url)
+	return nil
 }
 
 func (b *Bot) Send(msg string) error {
@@ -110,6 +144,9 @@ func (b *Bot) Run() error {
 		for {
 			_, data, err := b.conn.Read(ctx)
 			if err != nil {
+				if b.reconnect {
+					return b.dial(b.url, b.token)
+				}
 				return fmt.Errorf("failed while reading message: %w", err)
 			}
 			b.logger.Debugw("message read", "msg", string(data))
@@ -118,13 +155,12 @@ func (b *Bot) Run() error {
 	})
 
 	eg.Go(func() error {
+	OUTER:
 		for raw := range rawMsgs {
-			// TODO: move this out into triviabot rather than the bot package
-			if strings.HasPrefix(raw, "VIEWERSTATE") ||
-				strings.HasPrefix(raw, "JOIN") ||
-				strings.HasPrefix(raw, "QUIT") ||
-				strings.HasPrefix(raw, "NAMES") {
-				continue
+			for _, filter := range b.filters {
+				if strings.HasPrefix(raw, string(filter)) {
+					continue OUTER
+				}
 			}
 
 			msg, err := parseMsg(raw)

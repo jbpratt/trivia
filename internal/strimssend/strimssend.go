@@ -13,7 +13,7 @@ type StrimsSend struct {
 }
 
 func New(logger *zap.SugaredLogger, url, jwt string) (*StrimsSend, error) {
-	bot, err := bot.New(logger, url, jwt)
+	bot, err := bot.New(logger, url, jwt, true)
 	if err != nil {
 		return nil, fmt.Errorf("error creating bot: %w", err)
 	}

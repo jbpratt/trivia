@@ -36,7 +36,14 @@ func New(
 	duration time.Duration,
 ) (*TriviaBot, error) {
 
-	bot, err := bot.New(logger, url, jwt)
+	filters := []bot.MsgTypeFilter{
+		bot.JoinFilter,
+		bot.QuitFilter,
+		bot.ViewerStateFilter,
+		bot.NamesFilter,
+	}
+
+	bot, err := bot.New(logger, url, jwt, true, filters...)
 	if err != nil {
 		return nil, fmt.Errorf("error creating bot: %w", err)
 	}
