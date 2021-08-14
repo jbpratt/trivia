@@ -39,6 +39,7 @@ type Round struct {
 	Participants []*Participant
 	Complete     bool
 	Num          int
+	StartedAt    time.Time
 	PrevRound    *Round
 	NextRound    *Round
 }
@@ -49,9 +50,9 @@ type Answer struct {
 }
 
 type Participant struct {
-	Name   string
-	Choice int
-	TimeIn int64
+	Name             string
+	Choice           int
+	TimeToSubmission time.Duration
 }
 
 type Quiz struct {
@@ -289,7 +290,7 @@ func (q *Quiz) SortedScore() map[string]int {
 	return data
 }
 
-func (r *Round) NewParticipant(username string, answer int, time int64) bool {
+func (r *Round) NewParticipant(username string, answer int, timeIn int64) bool {
 	for _, participant := range r.Participants {
 		if participant.Name == username {
 			return false
@@ -300,8 +301,12 @@ func (r *Round) NewParticipant(username string, answer int, time int64) bool {
 		return false
 	}
 
-	r.logger.Infow("new participant", "username", username, "answer", answer, "time", time)
-	r.Participants = append(r.Participants, &Participant{username, answer, time})
+	timeToSub := time.Unix(timeIn/1000, 0).Sub(r.StartedAt)
+	p := &Participant{username, answer, timeToSub}
+
+	r.Participants = append(r.Participants, p)
+	r.logger.Infow("new participant", "entry", p)
+
 	return true
 }
 
@@ -324,7 +329,7 @@ func (r *Round) DetermineWinners() []*Participant {
 
 	// sort participants by time in
 	sort.Slice(winners, func(i, j int) bool {
-		return winners[i].TimeIn < winners[j].TimeIn
+		return winners[i].TimeToSubmission < winners[j].TimeToSubmission
 	})
 
 	r.logger.Infow("winners determined", "winners", winners)

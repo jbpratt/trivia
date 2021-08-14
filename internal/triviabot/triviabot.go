@@ -64,7 +64,7 @@ func New(
 	bot.OnPrivMessage(t.onPrivMsg)
 
 	if err = t.generateLeaderboardPage(); err != nil {
-		return nil, fmt.Errorf("failed to generate page on startup: %w", err)
+		return nil, fmt.Errorf("failed to generate leaderboard page on startup: %w", err)
 	}
 
 	return t, nil
@@ -264,6 +264,8 @@ func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
 		return fmt.Errorf("failed to send round start msgs: %w", err)
 	}
 
+	round.StartedAt = time.Now()
+
 	for {
 		if !t.quiz.InProgress {
 			t.logger.Info("round is no longer in progress.. breaking")
@@ -290,12 +292,17 @@ func (t *TriviaBot) onRoundCompletion(correct string, score []*trivia.Participan
 	var line string
 	entries := []string{}
 	for i := 0; i < len(score) && i <= 2; i++ {
-		line = fmt.Sprintf("%s %s", humanize.Ordinal(i+1), score[i].Name)
+		s := score[i]
+		line = fmt.Sprintf("%s %s", humanize.Ordinal(i+1), s.Name)
 
-		// if len(score) >= 2 && i > 0 {
-		//	timeDiff := time.Unix(0, score[i].TimeIn).Sub(time.Unix(0, score[i-1].TimeIn))
-		//	line += fmt.Sprintf(" (+%s)", timeDiff.Round(time.Millisecond))
-		// }
+		if i == 0 {
+			rounded := s.TimeToSubmission.Round(time.Millisecond)
+			line = fmt.Sprintf(" (+%s to answer) %s", rounded, line)
+		} else if i > 0 && len(score) >= 2 {
+			diff := s.TimeToSubmission - score[i-1].TimeToSubmission
+			line = fmt.Sprintf(" (+%s) %s", diff.Round(time.Millisecond), line)
+		}
+
 		entries = append(entries, line)
 	}
 
@@ -324,7 +331,7 @@ const tpl = `
         <td>{{.Name}}</td>
         <td>{{.Points}}</td>
         <td>{{.GamesPlayed}}</td>
-        <td>{{divide .Points .GamesPlayed }} </td>
+        <td>{{divide .Points .GamesPlayed}}</td>
       </tr>
       {{end}}
     </table>
