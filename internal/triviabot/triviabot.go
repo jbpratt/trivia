@@ -96,23 +96,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 	// }
 
 	if strings.Contains(msg.Data, "leaderboard") || strings.Contains(msg.Data, "highscore") {
-		output := "https://jbpratt.xyz/leaderboard.html"
-		oneHourAgo := time.Now().Add(-1 * time.Hour)
-		if t.lastTemplatedLeadboardAt.After(oneHourAgo) {
-			timeLeft := t.lastTemplatedLeadboardAt.Sub(oneHourAgo).Round(time.Second)
-			if err := t.bot.Send(
-				fmt.Sprintf("Leaderboard generation is on cooldown for %s. %s", timeLeft, output),
-			); err != nil {
-				return fmt.Errorf("failed to send cooldown message: %w", err)
-			}
-			return nil
-		}
-
-		if err := t.generateLeaderboardPage(); err != nil {
-			return fmt.Errorf("failed to generated leaderboard: %w", err)
-		}
-
-		if err := t.bot.Send("New leaderboard generated at " + output); err != nil {
+		if err := t.bot.Send("https://jbpratt.xyz/leaderboard.html"); err != nil {
 			return fmt.Errorf("error sending leaderboard link: %w", err)
 		}
 		return nil
@@ -234,6 +218,9 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 		output += english.OxfordWordSeries(winners, "and")
 		if err = t.leaderboard.Update(ss); err != nil {
 			return fmt.Errorf("failed to update leaderboard: %w", err)
+		}
+		if err = t.generateLeaderboardPage(); err != nil {
+			return fmt.Errorf("failed to generated leaderboard: %w", err)
 		}
 	}
 
