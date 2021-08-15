@@ -232,13 +232,19 @@ func (q *Quiz) StartRound(
 
 		// append onto the current quiz leaderboard
 		score := 3
-		roundScore := q.CurrentRound.DetermineWinners()
-		for _, v := range roundScore {
+		winners, losers := q.CurrentRound.DetermineOutcome()
+		for _, v := range winners {
 			if score >= 1 {
 				q.Scoreboard[v.Name] += score * 2
 				score--
 			} else {
 				q.Scoreboard[v.Name] += 1
+			}
+		}
+
+		for _, v := range losers {
+			if _, ok := q.Scoreboard[v.Name]; !ok {
+				q.Scoreboard[v.Name] = 0
 			}
 		}
 
@@ -253,7 +259,7 @@ func (q *Quiz) StartRound(
 
 		q.logger.Infof("the correct answer is %q", correct)
 
-		if err := onComplete(correct, roundScore); err != nil {
+		if err := onComplete(correct, winners); err != nil {
 			q.logger.Fatalf("failed to run onComplete: %v", err)
 		}
 		q.InProgress = false
@@ -310,7 +316,7 @@ func (r *Round) NewParticipant(username string, answer int, timeIn int64) bool {
 	return true
 }
 
-func (r *Round) DetermineWinners() []*Participant {
+func (r *Round) DetermineOutcome() ([]*Participant, []*Participant) {
 	correctIdx := 0
 	for idx, ans := range r.Answers {
 		if ans.Correct {
@@ -319,11 +325,14 @@ func (r *Round) DetermineWinners() []*Participant {
 		}
 	}
 
+	losers := []*Participant{}
 	winners := []*Participant{}
 	// filter participants for correct choice
 	for _, participant := range r.Participants {
 		if participant.Choice == correctIdx {
 			winners = append(winners, participant)
+		} else {
+			losers = append(losers, participant)
 		}
 	}
 
@@ -333,5 +342,5 @@ func (r *Round) DetermineWinners() []*Participant {
 	})
 
 	r.logger.Infow("winners determined", "winners", winners)
-	return winners
+	return winners, losers
 }

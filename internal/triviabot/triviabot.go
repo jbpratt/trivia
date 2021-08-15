@@ -227,7 +227,9 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 		ss := t.quiz.SortedScore()
 		winners := []string{}
 		for name, points := range ss {
-			winners = append(winners, fmt.Sprintf("%s +%d point(s)", name, points))
+			if points > 0 {
+				winners = append(winners, fmt.Sprintf("%s +%d point(s)", name, points))
+			}
 		}
 		output += english.OxfordWordSeries(winners, "and")
 		if err = t.leaderboard.Update(ss); err != nil {
