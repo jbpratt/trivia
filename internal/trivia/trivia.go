@@ -307,7 +307,7 @@ func (r *Round) NewParticipant(username string, answer int, timeIn int64) bool {
 		return false
 	}
 
-	timeToSub := time.Unix(timeIn/1000, 0).Sub(r.StartedAt)
+	timeToSub := time.Unix(timeIn/1000, timeIn%1000*int64(time.Millisecond)).Sub(r.StartedAt)
 	p := &Participant{username, answer, timeToSub}
 
 	r.Participants = append(r.Participants, p)
