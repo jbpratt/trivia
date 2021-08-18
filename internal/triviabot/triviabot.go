@@ -111,7 +111,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 		}
 
 		fiveMinAgo := time.Now().Add(-5 * time.Minute)
-		if t.lastQuizEndedAt.After(fiveMinAgo) && !strings.Contains(msg.Data, "force") {
+		if t.lastQuizEndedAt.After(fiveMinAgo) {
 			timeLeft := t.lastQuizEndedAt.Sub(fiveMinAgo).Round(time.Second)
 			if err := t.bot.Send(fmt.Sprintf("on cooldown for %s PepoSleep", timeLeft)); err != nil {
 				return fmt.Errorf("failed to send quiz in progress msg: %w", err)
