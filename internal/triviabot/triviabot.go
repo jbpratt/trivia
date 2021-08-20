@@ -286,7 +286,7 @@ func (t *TriviaBot) onRoundCompletion(correct string, score []*trivia.Participan
 
 		if i == 0 {
 			rounded := s.TimeToSubmission.Round(time.Millisecond)
-			line = fmt.Sprintf(" (+%s to answer) %s", rounded, line)
+			line = fmt.Sprintf(" (%s to answer) %s", rounded, line)
 		} else if i > 0 && len(score) >= 2 {
 			diff := s.TimeToSubmission - score[i-1].TimeToSubmission
 			line = fmt.Sprintf(" (+%s) %s", diff.Round(time.Millisecond), line)
