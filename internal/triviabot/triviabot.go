@@ -159,7 +159,7 @@ func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 				return err
 			}
 		} else {
-			if err = t.bot.SendPriv("Your answer has been submitted.", msg.User); err != nil {
+			if err = t.bot.SendPriv("Your answer has been locked in NODDERS", msg.User); err != nil {
 				return err
 			}
 		}
