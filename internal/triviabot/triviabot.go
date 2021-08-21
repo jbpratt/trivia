@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,6 +23,7 @@ import (
 type TriviaBot struct {
 	logger                   *zap.SugaredLogger
 	bot                      *bot.Bot
+	sources                  []trivia.Source
 	quiz                     *trivia.Quiz
 	leaderboard              *trivia.Leaderboard
 	lastQuizEndedAt          time.Time
@@ -35,7 +36,6 @@ func New(
 	url, jwt, dbPath, lboardOutputPath string,
 	duration time.Duration,
 ) (*TriviaBot, error) {
-
 	filters := []bot.MsgTypeFilter{
 		bot.JoinFilter,
 		bot.QuitFilter,
@@ -48,6 +48,11 @@ func New(
 		return nil, fmt.Errorf("error creating bot: %w", err)
 	}
 
+	openTDBSource, err := trivia.NewDefaultOpenTDBSource()
+	if err != nil {
+		return nil, err
+	}
+
 	var lboard *trivia.Leaderboard
 	lboard, err = trivia.NewLeaderboard(logger, dbPath)
 	if err != nil {
@@ -57,6 +62,7 @@ func New(
 	t := &TriviaBot{
 		logger:                logger,
 		bot:                   bot,
+		sources:               []trivia.Source{openTDBSource},
 		leaderboard:           lboard,
 		leaderboardOutputPath: lboardOutputPath,
 	}
@@ -103,6 +109,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 	}
 
 	if strings.Contains(msg.Data, "start") || strings.Contains(msg.Data, "new") {
+		log.Println("start called")
 		if t.quiz != nil && t.quiz.InProgress {
 			if err := t.bot.Send("a quiz is already in progress"); err != nil {
 				return fmt.Errorf("failed to send quiz in progress msg: %w", err)
@@ -110,6 +117,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 			return nil
 		}
 
+		log.Println("no quiz in progress")
 		fiveMinAgo := time.Now().Add(-5 * time.Minute)
 		if t.lastQuizEndedAt.After(fiveMinAgo) {
 			timeLeft := t.lastQuizEndedAt.Sub(fiveMinAgo).Round(time.Second)
@@ -119,15 +127,15 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 			return nil
 		}
 
+		log.Println("creating quiz")
 		// TODO: allow for providing quiz size
-		var err error
-		if t.quiz == nil || (t.quiz.CurrentRound != nil && t.quiz.CurrentRound.NextRound == nil) {
-			t.quiz, err = trivia.NewDefaultQuiz(t.logger)
-			if err != nil {
-				return fmt.Errorf("failed to create a new quiz: %w", err)
-			}
+		quiz, err := trivia.NewDefaultQuiz(t.logger, t.sources...)
+		if err != nil {
+			return fmt.Errorf("failed to create a new quiz: %w", err)
 		}
+		t.quiz = quiz
 
+		log.Println("quiz created, running quiz")
 		go func() {
 			if err = t.runQuiz(ctx); err != nil {
 				t.logger.Fatalf("failed while running the quiz: %v", err)
@@ -152,7 +160,7 @@ func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 			return nil
 		}
 
-		if !t.quiz.CurrentRound.NewParticipant(msg.User, answer-1, msg.Time) {
+		if !t.quiz.CurrentRound().NewParticipant(msg.User, answer-1, msg.Time) {
 			if err = t.bot.SendPriv(
 				"Your answer is invalid or you have already submitted one!", msg.User,
 			); err != nil {
@@ -191,7 +199,7 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 	}
 
 	// continue running rounds
-	for round.NextRound != nil {
+	for !round.Final {
 		t.logger.Infof("running next round %d", round.Num)
 		round, err = t.quiz.StartRound(t.onRoundCompletion)
 		if err != nil {
@@ -228,7 +236,7 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 }
 
 func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
-	if round.NextRound != nil {
+	if !round.Final {
 		defer func() {
 			t.logger.Info("sleeping for 25 seconds until next round")
 			time.Sleep(25 * time.Second)
@@ -236,15 +244,15 @@ func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
 	}
 
 	leading := fmt.Sprintf("Round %d", round.Num)
-	if round.NextRound == nil {
+	if round.Final {
 		leading = "Final round"
 	}
 
-	question := strings.ReplaceAll(round.Question, "`", "'")
-	output := fmt.Sprintf("%s: %q (%s). `%s` ", leading, round.Category, round.Difficulty, question)
+	question := strings.ReplaceAll(round.Question.Question, "`", "'")
+	output := fmt.Sprintf("%s: %q (%s). `%s` ", leading, round.Question.Category, round.Question.Difficulty, question)
 
 	// answers have already been shuffled
-	for idx, ans := range round.Answers {
+	for idx, ans := range round.Question.Answers {
 		output += fmt.Sprintf(" `%d) %s`", idx+1, ans.Value)
 	}
 
@@ -352,7 +360,7 @@ func (t *TriviaBot) generateLeaderboardPage() error {
 		Highscores:  highscores,
 	}
 
-	if err = os.MkdirAll(filepath.Dir(t.leaderboardOutputPath), fs.ModeDir); err != nil {
+	if err = os.MkdirAll(filepath.Dir(t.leaderboardOutputPath), 0755); err != nil {
 		return fmt.Errorf("failed to create leaderbord output dir (%s): %w", t.leaderboardOutputPath, err)
 	}
 

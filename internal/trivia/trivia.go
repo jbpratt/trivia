@@ -2,12 +2,8 @@
 package trivia
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
-	"net/http"
-	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -15,33 +11,16 @@ import (
 	"go.uber.org/zap"
 )
 
-const baseURL = "https://opentdb.com/"
-
-type response struct {
-	ResponseCode int `json:"response_code"`
-	Results      []struct {
-		Category         string   `json:"category"`
-		Type             string   `json:"type"`
-		Difficulty       string   `json:"difficulty"`
-		Question         string   `json:"question"`
-		CorrectAnswer    string   `json:"correct_answer"`
-		IncorrectAnswers []string `json:"incorrect_answers"`
-	} `json:"results"`
+type Source interface {
+	Question() (*Question, error)
 }
 
-type Round struct {
-	logger       *zap.SugaredLogger
-	Category     string
-	Difficulty   string
-	Question     string
-	Type         string
-	Answers      []*Answer
-	Participants []*Participant
-	Complete     bool
-	Num          int
-	StartedAt    time.Time
-	PrevRound    *Round
-	NextRound    *Round
+type Question struct {
+	Category   string
+	Difficulty string
+	Question   string
+	Type       string
+	Answers    []*Answer
 }
 
 type Answer struct {
@@ -57,142 +36,54 @@ type Participant struct {
 
 type Quiz struct {
 	logger       *zap.SugaredLogger
-	client       *http.Client
-	url          string
 	duration     time.Duration
-	FirstRound   *Round
-	CurrentRound *Round
+	currentRound int
+	rng          *rand.Rand
+	Rounds       []*Round
 	Timer        *time.Timer
 	InProgress   bool
 	Scoreboard   map[string]int
 }
 
-func NewDefaultQuiz(logger *zap.SugaredLogger) (*Quiz, error) {
-	return NewQuiz(logger, 3, 30*time.Second)
+func NewDefaultQuiz(logger *zap.SugaredLogger, sources ...Source) (*Quiz, error) {
+	return NewQuiz(logger, 3, 30*time.Second, sources...)
 }
 
-func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration) (*Quiz, error) {
-	rand.Seed(time.Now().UnixNano())
-
-	client := &http.Client{}
-	resp, err := client.Get(fmt.Sprintf("%s/api_token.php?command=request", baseURL))
-	if err != nil {
-		return nil, fmt.Errorf("failed to request token: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		logger.Debug("server returned bad response", "status_code", resp.StatusCode)
-		return nil, fmt.Errorf("server returned invalid http code: %d", resp.StatusCode)
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read token response body: %w", err)
-	}
-
-	tokenRes := struct {
-		Token string `json:"token"`
-	}{}
-
-	if err = json.Unmarshal(body, &tokenRes); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal token: %w", err)
-	}
-
-	u, err := url.Parse(fmt.Sprintf("%s/api.php", baseURL))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse url: %w", err)
-	}
-
-	q, err := url.ParseQuery(u.RawQuery)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse query: %w", err)
-	}
-
-	q.Add("token", tokenRes.Token)
-	q.Add("amount", fmt.Sprint(size))
-	u.RawQuery = q.Encode()
-
+func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration, sources ...Source) (*Quiz, error) {
 	quiz := &Quiz{
-		client:     client,
-		url:        u.String(),
-		duration:   duration,
-		logger:     logger,
-		InProgress: false,
-		Scoreboard: map[string]int{},
+		duration:     duration,
+		logger:       logger,
+		rng:          rand.New(rand.NewSource(time.Now().UnixNano())),
+		currentRound: -1,
+		Scoreboard:   map[string]int{},
 	}
 
-	quiz.logger.Info("new quiz created, creating new series of rounds")
-	if err = quiz.newSeries(); err != nil {
-		return nil, fmt.Errorf("error creating new quiz: %w", err)
+	quiz.logger.Info("creating new series of rounds")
+
+	for i := 0; i < size; i++ {
+		src := sources[0]
+		if len(sources) > 1 {
+			src = sources[quiz.rng.Intn(len(sources)-1)]
+		}
+
+		question, err := src.Question()
+		if err != nil {
+			return nil, err
+		}
+
+		quiz.Rounds = append(quiz.Rounds, &Round{
+			logger:   logger,
+			Question: question,
+			Num:      i + 1,
+			Final:    i == size-1,
+		})
 	}
 
 	return quiz, nil
 }
 
-func (q *Quiz) newSeries() error {
-	resp, err := q.client.Get(q.url)
-	if err != nil {
-		return fmt.Errorf("failed to get api data: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		q.logger.Debugw("bad response from server", "response_code", resp.StatusCode)
-		return fmt.Errorf("server returned bad http status: %d", resp.StatusCode)
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read api response body: %w", err)
-	}
-
-	var resultsResp response
-	if err = json.Unmarshal(body, &resultsResp); err != nil {
-		return fmt.Errorf("failed to unmarshal api response body: %w", err)
-	}
-
-	if len(resultsResp.Results) == 0 {
-		return fmt.Errorf("server returned no results: %v", resultsResp)
-	}
-
-	roundNum := 1
-	var head *Round
-	var curr *Round
-	for _, result := range resultsResp.Results {
-		round := &Round{
-			logger:     q.logger,
-			Category:   result.Category,
-			Difficulty: result.Difficulty,
-			Question:   result.Question,
-			Type:       result.Type,
-			Answers: []*Answer{
-				{result.CorrectAnswer, true},
-			},
-			Num:          roundNum,
-			PrevRound:    curr,
-			NextRound:    nil,
-			Complete:     false,
-			Participants: []*Participant{},
-		}
-
-		for _, value := range result.IncorrectAnswers {
-			round.Answers = append(round.Answers, &Answer{value, false})
-		}
-
-		if head == nil {
-			head = round
-		}
-
-		if curr != nil {
-			curr.NextRound = round
-		}
-
-		curr = round
-		roundNum++
-	}
-
-	q.FirstRound = head
-
-	return nil
+func (q *Quiz) CurrentRound() *Round {
+	return q.Rounds[q.currentRound]
 }
 
 func (q *Quiz) StartRound(
@@ -200,30 +91,25 @@ func (q *Quiz) StartRound(
 ) (*Round, error) {
 	q.logger.Info("starting round")
 
-	if q.FirstRound == nil {
-		return nil, fmt.Errorf("rounds are not initialized")
+	q.currentRound++
+	if q.currentRound >= len(q.Rounds) {
+		return nil, fmt.Errorf("quiz is already complete")
 	}
+	round := q.Rounds[q.currentRound]
+	question := round.Question
 
-	// find the first round in the list that is not marked as complete
-	q.CurrentRound = q.FirstRound
-	for q.CurrentRound.Complete {
-		if tmp := q.CurrentRound; tmp.NextRound != nil {
-			q.CurrentRound = tmp.NextRound
+	q.logger.Infow("determined round...", "question", question)
+
+	if question.Type == "boolean" {
+		if len(question.Answers) != 2 {
+			return nil, fmt.Errorf("unexpected answer count for boolean question %d", len(question.Answers))
 		}
-	}
-
-	q.logger.Infow("determined round...", "question", q.CurrentRound.Question)
-
-	if q.CurrentRound.Type == "boolean" {
-		for idx, answer := range q.CurrentRound.Answers {
-			if strings.ToLower(answer.Value) == "true" && idx != 0 {
-				q.CurrentRound.Answers[idx-1], q.CurrentRound.Answers[idx] = q.CurrentRound.Answers[idx], q.CurrentRound.Answers[idx-1]
-				break
-			}
+		if strings.ToLower(question.Answers[0].Value) != "true" {
+			question.Answers[0], question.Answers[1] = question.Answers[1], question.Answers[0]
 		}
 	} else {
-		rand.Shuffle(len(q.CurrentRound.Answers), func(i, j int) {
-			q.CurrentRound.Answers[i], q.CurrentRound.Answers[j] = q.CurrentRound.Answers[j], q.CurrentRound.Answers[i]
+		q.rng.Shuffle(len(question.Answers), func(i, j int) {
+			question.Answers[i], question.Answers[j] = question.Answers[j], question.Answers[i]
 		})
 	}
 
@@ -232,7 +118,7 @@ func (q *Quiz) StartRound(
 
 		// append onto the current quiz leaderboard
 		score := 3
-		winners, losers := q.CurrentRound.DetermineOutcome()
+		winners, losers := round.DetermineOutcome()
 		for _, v := range winners {
 			if score >= 1 {
 				q.Scoreboard[v.Name] += score * 2
@@ -250,7 +136,7 @@ func (q *Quiz) StartRound(
 
 		// determine correct answer and format it
 		var correct string
-		for idx, ans := range q.CurrentRound.Answers {
+		for idx, ans := range question.Answers {
 			if ans.Correct {
 				correct = fmt.Sprintf("`%d) %s`", idx+1, ans.Value)
 				break
@@ -263,13 +149,13 @@ func (q *Quiz) StartRound(
 			q.logger.Fatalf("failed to run onComplete: %v", err)
 		}
 		q.InProgress = false
-		q.CurrentRound.Complete = true
+		round.Complete = true
 	})
 
 	q.logger.Infow("timer started, round set to in progress", "duration", q.duration)
 	q.InProgress = true
 
-	return q.CurrentRound, nil
+	return round, nil
 }
 
 func (q *Quiz) SortedScore() map[string]int {
@@ -296,6 +182,16 @@ func (q *Quiz) SortedScore() map[string]int {
 	return data
 }
 
+type Round struct {
+	logger       *zap.SugaredLogger
+	Question     *Question
+	Participants []*Participant
+	Complete     bool
+	Num          int
+	StartedAt    time.Time
+	Final        bool
+}
+
 func (r *Round) NewParticipant(username string, answer int, timeIn int64) bool {
 	for _, participant := range r.Participants {
 		if participant.Name == username {
@@ -303,7 +199,7 @@ func (r *Round) NewParticipant(username string, answer int, timeIn int64) bool {
 		}
 	}
 
-	if answer >= len(r.Answers) {
+	if answer >= len(r.Question.Answers) {
 		return false
 	}
 
@@ -318,7 +214,7 @@ func (r *Round) NewParticipant(username string, answer int, timeIn int64) bool {
 
 func (r *Round) DetermineOutcome() ([]*Participant, []*Participant) {
 	correctIdx := 0
-	for idx, ans := range r.Answers {
+	for idx, ans := range r.Question.Answers {
 		if ans.Correct {
 			correctIdx = idx
 			break
