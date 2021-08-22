@@ -15,7 +15,7 @@ import (
 	"github.com/dustin/go-humanize/english"
 	"github.com/jbpratt/bots/internal/bot"
 	"github.com/jbpratt/bots/internal/trivia"
-	"github.com/jbpratt/bots/internal/trivia/leaderboard/models"
+	"github.com/jbpratt/bots/internal/trivia/models"
 	"go.uber.org/zap"
 )
 

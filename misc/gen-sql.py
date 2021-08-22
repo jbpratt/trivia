@@ -5,16 +5,18 @@ import json
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import TextIO
+
+INSERT_LINE = "INSERT OR IGNORE INTO\n\tquestions(question,answer,choices,categories,used,source,type,difficulty)\nVALUES\n"
 
 
-def millionairedb_gen() -> None:
+def millionairedb_gen(output: TextIO) -> None:
     path = "misc/millionairedb-questions.json"
 
     data: List[Dict[str, Any]]
     with open(path) as file:
         data = json.load(file)
 
-    line = "INSERT OR IGNORE INTO\n\tquestions(question,answer,choices,categories,used,type,difficulty)\nVALUES\n"
     values: List[str] = []
     # misc/questions.json has been filtered to only contain these fields
     for row in data:
@@ -24,23 +26,19 @@ def millionairedb_gen() -> None:
         categories = ",".join(list(dict.fromkeys(row["keywords"] + row["tags"])))
 
         values.append(
-            f'\t(\n\t\t"{question}","{answer}","{choices}","{categories}",0,"",""\n\t)'
+            f'\t("{question}","{answer}","{choices}","{categories}",0,"millionairedb","","")'
         )
 
-    line += ",\n".join(values) + ";"
-
-    with open("internal/trivia/millionairedb-questions.sql", "w") as file:
-        file.write(line)
+    output.write(",\n".join(values))
 
 
-def opentdb_gen() -> None:
+def opentdb_gen(output: TextIO) -> None:
     path = "misc/opentdb-questions.json"
 
     data: Dict[str, Any]
     with open(path) as file:
         data = json.load(file)
 
-    line = "INSERT OR IGNORE INTO\n\tquestions(question,answer,choices,categories,used,type,difficulty)\nVALUES\n"
     values: List[str] = []
     for row in data.values():
         category = row["category"]
@@ -54,18 +52,21 @@ def opentdb_gen() -> None:
         choices = ",".join(answers)
 
         values.append(
-            f'\t(\n\t\t"{question}","{correct_answer}","{choices}","{category}",0,"{question_type}","{difficulty}"\n\t)'
+            f'\t("{question}","{correct_answer}","{choices}","{category}",0,"opentdb","{question_type}","{difficulty}")'
         )
 
-    line += ",\n".join(values) + ";"
-
-    with open("internal/trivia/opentdb-questions.sql", "w") as file:
-        file.write(line)
+    output.write(",\n".join(values))
 
 
 def main() -> int:
-    millionairedb_gen()
-    opentdb_gen()
+
+    with open("internal/trivia/questions.sql", "w") as file:
+        file.write(INSERT_LINE)
+        millionairedb_gen(file)
+        file.write(",\n")
+        opentdb_gen(file)
+        file.write(";")
+
     return 0
 
 

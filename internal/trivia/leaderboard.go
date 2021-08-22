@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jbpratt/bots/internal/trivia/leaderboard/models"
+	"github.com/jbpratt/bots/internal/trivia/models"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"go.uber.org/zap"
