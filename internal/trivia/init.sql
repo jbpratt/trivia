@@ -23,5 +23,7 @@ CREATE TABLE IF NOT EXISTS questions (
   choices      TEXT    NOT NULL,
   categories   TEXT    NOT NULL,
   used         INTEGER NOT NULL,
+  type         TEXT,
+  difficulty   TEXT,
   UNIQUE(question)
 );

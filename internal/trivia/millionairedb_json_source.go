@@ -1,11 +1,14 @@
 package trivia
 
 import (
+	_ "embed"
 	"encoding/json"
 	"math/rand"
-	"os"
 	"time"
 )
+
+//go:embed millionairedb-questions.json
+var millionaireDBQuestionsJSON []byte
 
 type MillionaireDBQuestion struct {
 	Answer   string   `json:"answer"`
@@ -18,14 +21,9 @@ type MillionaireDBJSONSource struct {
 	Questions []*MillionaireDBQuestion
 }
 
-func NewMillionaireDBJSONSource(path string) (*MillionaireDBJSONSource, error) {
-	f, err := os.OpenFile(path, os.O_RDONLY, 0400)
-	if err != nil {
-		return nil, err
-	}
-
+func NewMillionaireDBJSONSource() (*MillionaireDBJSONSource, error) {
 	var questions []*MillionaireDBQuestion
-	if err := json.NewDecoder(f).Decode(&questions); err != nil {
+	if err := json.Unmarshal(millionaireDBQuestionsJSON, &questions); err != nil {
 		return nil, err
 	}
 

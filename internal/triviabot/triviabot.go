@@ -20,19 +20,18 @@ import (
 )
 
 type TriviaBot struct {
-	logger                   *zap.SugaredLogger
-	bot                      *bot.Bot
-	sources                  []trivia.Source
-	quiz                     *trivia.Quiz
-	leaderboard              *trivia.Leaderboard
-	lastQuizEndedAt          time.Time
-	lastTemplatedLeadboardAt time.Time
-	leaderboardOutputPath    string
+	logger                *zap.SugaredLogger
+	bot                   *bot.Bot
+	sources               []trivia.Source
+	quiz                  *trivia.Quiz
+	leaderboard           *trivia.Leaderboard
+	lastQuizEndedAt       time.Time
+	leaderboardOutputPath string
 }
 
 func New(
 	logger *zap.SugaredLogger,
-	url, jwt, dbPath, mdbPath, lboardOutputPath string,
+	url, jwt, dbPath, lboardOutputPath string,
 	duration time.Duration,
 ) (*TriviaBot, error) {
 	filters := []bot.MsgTypeFilter{
@@ -52,7 +51,7 @@ func New(
 		return nil, err
 	}
 
-	mdbSource, err := trivia.NewMillionaireDBJSONSource(mdbPath)
+	mdbSource, err := trivia.NewMillionaireDBJSONSource()
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +93,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 
 	if strings.Contains(msg.Data, "help") || strings.Contains(msg.Data, "info") {
 		if err := t.bot.Send(
-			"Start a new round with `trivia start`. Whisper me the number beside the answer `/w trivia 2`. Data comes from https://opentdb.com/ which you can submit new questions to!",
+			"Start a new round with `trivia start`. Whisper me the number beside the answer `/w trivia 2`.",
 		); err != nil {
 			return fmt.Errorf("failed to send help msg: %w", err)
 		}
@@ -223,7 +222,13 @@ func (t *TriviaBot) runQuiz(ctx context.Context) error {
 				winners = append(winners, fmt.Sprintf("%s +%d point(s)", name, points))
 			}
 		}
-		output += english.OxfordWordSeries(winners, "and")
+
+		if len(winners) == 0 {
+			output += "No one! DuckerZ"
+		} else {
+			output += english.OxfordWordSeries(winners, "and")
+		}
+
 		if err = t.leaderboard.Update(ss); err != nil {
 			return fmt.Errorf("failed to update leaderboard: %w", err)
 		}
@@ -386,6 +391,5 @@ func (t *TriviaBot) generateLeaderboardPage() error {
 		return fmt.Errorf("failed to close file: %w", err)
 	}
 
-	t.lastTemplatedLeadboardAt = templatedAt
 	return nil
 }
