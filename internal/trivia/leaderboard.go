@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
-	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jbpratt/bots/internal/trivia/models"
@@ -23,11 +23,19 @@ var initSql string
 //go:embed questions.sql
 var questionsSql string
 
+var nextSnowflakeID uint64
+
+// GenerateSnowflake generate a 53 bit locally unique id (from ppspp)
+func generateSnowflake() uint64 {
+	seconds := uint64(time.Since(time.Date(2020, 0, 0, 0, 0, 0, 0, time.UTC)) / time.Second)
+	sequence := atomic.AddUint64(&nextSnowflakeID, 1) << 32
+	return (seconds | sequence) & 0x1fffffffffffff
+}
+
 type Leaderboard struct {
 	logger *zap.SugaredLogger
 	db     *sql.DB
 	rw     sync.RWMutex
-	rand   *rand.Rand
 }
 
 func NewLeaderboard(logger *zap.SugaredLogger, path string) (*Leaderboard, error) {
@@ -44,7 +52,6 @@ func NewLeaderboard(logger *zap.SugaredLogger, path string) (*Leaderboard, error
 	return &Leaderboard{
 		logger: logger,
 		db:     db,
-		rand:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 
@@ -84,7 +91,7 @@ func (l *Leaderboard) Update(entries map[string]int) error {
 			}
 		} else {
 			user = &models.User{
-				ID:          rand.Int63(),
+				ID:          int64(generateSnowflake()),
 				Name:        name,
 				Points:      int64(points),
 				GamesPlayed: 1,
