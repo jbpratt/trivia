@@ -2,10 +2,12 @@
 package trivia
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -35,13 +37,14 @@ type Participant struct {
 }
 
 type Quiz struct {
+	rw           sync.RWMutex
 	logger       *zap.SugaredLogger
 	duration     time.Duration
 	currentRound int
 	rng          *rand.Rand
 	Rounds       []*Round
 	Timer        *time.Timer
-	InProgress   bool
+	inProgress   bool
 	Scoreboard   map[string]int
 }
 
@@ -82,12 +85,27 @@ func (q *Quiz) CurrentRound() *Round {
 	return q.Rounds[q.currentRound]
 }
 
+func (q *Quiz) InProgress() bool {
+	q.rw.RLock()
+	defer q.rw.RUnlock()
+	return q.inProgress
+}
+
 func (q *Quiz) StartRound(
 	onComplete func(string, []*Participant) error,
 ) (*Round, error) {
+
+	if q.InProgress() {
+		return nil, errors.New("a quiz is already in progress")
+	}
+
 	q.logger.Info("starting round")
 
+	q.rw.Lock()
+	q.inProgress = true
 	q.currentRound++
+	q.rw.Unlock()
+
 	if q.currentRound >= len(q.Rounds) {
 		return nil, fmt.Errorf("quiz is already complete")
 	}
@@ -111,6 +129,8 @@ func (q *Quiz) StartRound(
 
 	q.Timer = time.AfterFunc(q.duration, func() {
 		q.logger.Info("time is up!")
+		q.rw.Lock()
+		defer q.rw.Unlock()
 
 		// append onto the current quiz leaderboard
 		score := 3
@@ -144,37 +164,25 @@ func (q *Quiz) StartRound(
 		if err := onComplete(correct, winners); err != nil {
 			q.logger.Fatalf("failed to run onComplete: %v", err)
 		}
-		q.InProgress = false
+
+		q.inProgress = false
 		round.Complete = true
 	})
 
 	q.logger.Infow("timer started, round set to in progress", "duration", q.duration)
-	q.InProgress = true
 
 	return round, nil
 }
 
-func (q *Quiz) SortedScore() map[string]int {
-	type score struct {
-		name   string
-		points int
-	}
+func (q *Quiz) Score() map[string]int {
+	q.rw.RLock()
+	defer q.rw.RUnlock()
 
-	var ss []score
-	for k, v := range q.Scoreboard {
-		ss = append(ss, score{k, v})
-	}
-
-	// sort winners by points for top 3
-	sort.Slice(ss, func(i, j int) bool {
-		return ss[i].points > ss[j].points
-	})
-
-	// update leaderboard at the end of the quiz with all users' points
 	data := map[string]int{}
-	for _, score := range ss {
-		data[score.name] = score.points
+	for name, points := range q.Scoreboard {
+		data[name] = points
 	}
+
 	return data
 }
 
