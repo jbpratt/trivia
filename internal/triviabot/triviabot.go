@@ -27,11 +27,12 @@ type TriviaBot struct {
 	leaderboard           *trivia.Leaderboard
 	lastQuizEndedAt       time.Time
 	leaderboardOutputPath string
+	leaderboardIngress    string
 }
 
 func New(
 	logger *zap.SugaredLogger,
-	url, jwt, dbPath, lboardOutputPath string,
+	url, jwt, dbPath, lboardOutputPath, lboardIngress string,
 	duration time.Duration,
 ) (*TriviaBot, error) {
 	filters := []bot.MsgTypeFilter{
@@ -68,6 +69,7 @@ func New(
 		sources:               []trivia.Source{openTDBSource, mdbSource},
 		leaderboard:           lboard,
 		leaderboardOutputPath: lboardOutputPath,
+		leaderboardIngress:    lboardIngress,
 	}
 	bot.OnMessage(t.onMsg)
 	bot.OnPrivMessage(t.onPrivMsg)
@@ -105,7 +107,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 	// }
 
 	if strings.Contains(msg.Data, "leaderboard") || strings.Contains(msg.Data, "highscore") {
-		if err := t.bot.Send("https://jbpratt.xyz/leaderboard.html"); err != nil {
+		if err := t.bot.Send(t.leaderboardIngress); err != nil {
 			return fmt.Errorf("error sending leaderboard link: %w", err)
 		}
 		return nil
@@ -335,23 +337,94 @@ const tpl = `
     <title>Strims Trivia Leaderboard</title>
   </head>
   <body>
+    <h3>Season 2</h3>
     <small>Generated at {{ .TemplatedAt.Format "Jan 02, 2006 15:04:05 UTC" }}</small>
     <table>
       <tr>
-        <th>Name</th>
+        <th>Username</th>
         <th>Points</th>
-        <th>Games played</th>
-        <th>Points per game</th>
+        <th>Games</th>
+        <th>Points/Game</th>
       </tr>
-      {{range .Highscores}}
+{{range .Highscores}}
       <tr>
         <td>{{.Name}}</td>
         <td>{{.Points}}</td>
         <td>{{.GamesPlayed}}</td>
         <td>{{divide .Points .GamesPlayed}}</td>
       </tr>
-      {{end}}
+{{end}}
     </table>
+    <hr class="solid">
+    <h3>Season 1 top 10</h3>
+    <table>
+      <tr>
+        <th>Username</th>
+        <th>Points</th>
+        <th>Games</th>
+        <th>Points/Game</th>
+      </tr>
+      <tr>
+        <td>tahley</td>
+        <td>6451</td>
+        <td>708</td>
+        <td>9.111582</td>
+      </tr>
+      <tr>
+        <td>anon</td>
+        <td>5503</td>
+        <td>837</td>
+        <td>6.5746713</td>
+      </tr>
+      <tr>
+        <td>salad</td>
+        <td>4159</td>
+        <td>589</td>
+        <td>7.0611205</td>
+      </tr>
+      <tr>
+        <td>Nhabls</td>
+        <td>3273</td>
+        <td>394</td>
+        <td>8.307107</td>
+      </tr>
+      <tr>
+        <td>bawrroccoli</td>
+        <td>2045</td>
+        <td>297</td>
+        <td>6.885522</td>
+      </tr>
+      <tr>
+        <td>guwap</td>
+        <td>1861</td>
+        <td>212</td>
+        <td>8.778302</td>
+      </tr>
+      <tr>
+        <td>blankspaceblank</td>
+        <td>1753</td>
+        <td>347</td>
+        <td>5.051873</td>
+      </tr>
+      <tr>
+        <td>mafaraxas</td>
+        <td>1025</td>
+        <td>173</td>
+        <td>5.9248557</td>
+      </tr>
+      <tr>
+        <td>KartoffelKopf</td>
+        <td>831</td>
+        <td>99</td>
+        <td>8.393939</td>
+      </tr>
+      <tr>
+        <td>Gehirnchirurg</td>
+        <td>787</td>
+        <td>56</td>
+        <td>14.053572</td>
+      </tr>
+      </table>
   </body>
 </html>`
 

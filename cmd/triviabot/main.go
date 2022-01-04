@@ -13,7 +13,8 @@ func main() {
 	serverURL := "wss://chat.strims.gg/ws"
 	dbPath := flag.String("db", "/tmp/trivia.db", "path to sqlite database")
 	dev := flag.Bool("dev", false, "use chat2")
-	leaderboardPage := flag.String("html", "/tmp/leaderboard/leaderboard.html", "path to output generated leaderboard page")
+	leaderboardPage := flag.String("html", "/tmp/leaderboard/index.html", "path to output generated leaderboard page")
+	leaderboardIngress := flag.String("ingress", "https://leaderboard.jbpratt.xyz", "leaderboard ingress URL")
 
 	flag.Parse()
 
@@ -39,7 +40,7 @@ func main() {
 		logger.Fatal("must provide $STRIMS_CHAT_TOKEN")
 	}
 
-	triviabot, err := triviabot.New(logger.Sugar(), url, jwt, *dbPath, *leaderboardPage, 15)
+	triviabot, err := triviabot.New(logger.Sugar(), url, jwt, *dbPath, *leaderboardPage, *leaderboardIngress, 15)
 	if err != nil {
 		logger.Fatal(err.Error())
 	}
@@ -48,5 +49,3 @@ func main() {
 		logger.Fatal(err.Error())
 	}
 }
-
-// show time difference in between pole positions
