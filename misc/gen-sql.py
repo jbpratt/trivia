@@ -10,6 +10,25 @@ from typing import TextIO
 INSERT_LINE = "INSERT OR IGNORE INTO\n\tquestions(question,answer,choices,categories,used,source,type,difficulty)\nVALUES\n"
 
 
+def jackbox_3_murder_gen(output: TextIO) -> None:
+    path = "misc/jackbox-3-murder-trivia.json"
+    data: List[Dict[str, Union[str, List[str]]]]
+    with open(path) as file:
+        data = json.load(file)
+
+    values: List[str] = []
+    for row in data:
+        question = row["question"].replace("\"", "\'")
+        answer = row["answer"].replace("\"", "\'")
+        choices = ",".join(row["options"]).replace("\"", "\'")
+
+        values.append(
+            f'\t("{question}","{answer}","{choices}","",0,"jackbox_3_murder","","")'
+        )
+
+    output.write(",\n".join(values))
+
+
 def millionairedb_gen(output: TextIO) -> None:
     path = "misc/millionairedb-questions.json"
 
@@ -65,6 +84,8 @@ def main() -> int:
         millionairedb_gen(file)
         file.write(",\n")
         opentdb_gen(file)
+        file.write(",\n")
+        jackbox_3_murder_gen(file)
         file.write(";")
 
     return 0

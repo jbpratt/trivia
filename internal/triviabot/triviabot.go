@@ -33,7 +33,6 @@ type TriviaBot struct {
 func New(
 	logger *zap.SugaredLogger,
 	url, jwt, dbPath, lboardOutputPath, lboardIngress string,
-	duration time.Duration,
 ) (*TriviaBot, error) {
 	filters := []bot.MsgTypeFilter{
 		bot.JoinFilter,
@@ -57,6 +56,11 @@ func New(
 		return nil, err
 	}
 
+	jb3Source, err := trivia.NewJackbox3MurderTriviaJSONSource()
+	if err != nil {
+		return nil, err
+	}
+
 	var lboard *trivia.Leaderboard
 	lboard, err = trivia.NewLeaderboard(logger, dbPath)
 	if err != nil {
@@ -66,7 +70,7 @@ func New(
 	t := &TriviaBot{
 		logger:                logger,
 		bot:                   bot,
-		sources:               []trivia.Source{openTDBSource, mdbSource},
+		sources:               []trivia.Source{openTDBSource, mdbSource, jb3Source},
 		leaderboard:           lboard,
 		leaderboardOutputPath: lboardOutputPath,
 		leaderboardIngress:    lboardIngress,

@@ -40,7 +40,7 @@ func main() {
 		logger.Fatal("must provide $STRIMS_CHAT_TOKEN")
 	}
 
-	triviabot, err := triviabot.New(logger.Sugar(), url, jwt, *dbPath, *leaderboardPage, *leaderboardIngress, 15)
+	triviabot, err := triviabot.New(logger.Sugar(), url, jwt, *dbPath, *leaderboardPage, *leaderboardIngress)
 	if err != nil {
 		logger.Fatal(err.Error())
 	}
