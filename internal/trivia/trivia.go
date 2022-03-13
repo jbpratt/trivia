@@ -18,11 +18,9 @@ type Source interface {
 }
 
 type Question struct {
-	Category   string
-	Difficulty string
-	Question   string
-	Type       string
-	Answers    []*Answer
+	Question string
+	Type     string
+	Answers  []*Answer
 }
 
 type Answer struct {

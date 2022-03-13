@@ -265,18 +265,7 @@ func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
 		}()
 	}
 
-	output := leading + ": "
-	if round.Question.Category != "" {
-		output += round.Question.Category + " "
-	}
-	if round.Question.Difficulty != "" {
-		output += "(" + round.Question.Difficulty + ")"
-	}
-	if round.Question.Category != "" || round.Question.Difficulty != "" {
-		output += ". "
-	}
-	output += "`" + strings.ReplaceAll(round.Question.Question, "`", "'") + "`"
-
+	output := leading + ": `" + strings.ReplaceAll(round.Question.Question, "`", "'") + "`"
 	// answers have already been shuffled
 	for idx, ans := range round.Question.Answers {
 		output += fmt.Sprintf(" `%d) %s`", idx+1, ans.Value)

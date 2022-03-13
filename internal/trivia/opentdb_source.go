@@ -81,9 +81,7 @@ func (s *OpenTDBSource) refreshCache() error {
 	var resultsResp struct {
 		ResponseCode int `json:"response_code"`
 		Results      []struct {
-			Category         string   `json:"category"`
 			Type             string   `json:"type"`
-			Difficulty       string   `json:"difficulty"`
 			Question         string   `json:"question"`
 			CorrectAnswer    string   `json:"correct_answer"`
 			IncorrectAnswers []string `json:"incorrect_answers"`
@@ -100,10 +98,8 @@ func (s *OpenTDBSource) refreshCache() error {
 
 	for _, result := range resultsResp.Results {
 		q := &Question{
-			Category:   result.Category,
-			Difficulty: result.Difficulty,
-			Question:   result.Question,
-			Type:       result.Type,
+			Question: result.Question,
+			Type:     result.Type,
 			Answers: []*Answer{
 				{result.CorrectAnswer, true},
 			},
