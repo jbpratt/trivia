@@ -23,62 +23,47 @@ import (
 
 // Question is an object representing the database table.
 type Question struct {
-	ID         null.Int64  `boil:"id" json:"id,omitempty" toml:"id" yaml:"id,omitempty"`
-	Question   string      `boil:"question" json:"question" toml:"question" yaml:"question"`
-	Answer     string      `boil:"answer" json:"answer" toml:"answer" yaml:"answer"`
-	Choices    string      `boil:"choices" json:"choices" toml:"choices" yaml:"choices"`
-	Categories string      `boil:"categories" json:"categories" toml:"categories" yaml:"categories"`
-	Used       int64       `boil:"used" json:"used" toml:"used" yaml:"used"`
-	Source     string      `boil:"source" json:"source" toml:"source" yaml:"source"`
-	Type       null.String `boil:"type" json:"type,omitempty" toml:"type" yaml:"type,omitempty"`
-	Difficulty null.String `boil:"difficulty" json:"difficulty,omitempty" toml:"difficulty" yaml:"difficulty,omitempty"`
+	ID       null.Int64 `boil:"id" json:"id,omitempty" toml:"id" yaml:"id,omitempty"`
+	Question string     `boil:"question" json:"question" toml:"question" yaml:"question"`
+	Answer   string     `boil:"answer" json:"answer" toml:"answer" yaml:"answer"`
+	Choices  string     `boil:"choices" json:"choices" toml:"choices" yaml:"choices"`
+	Used     int64      `boil:"used" json:"used" toml:"used" yaml:"used"`
+	Source   string     `boil:"source" json:"source" toml:"source" yaml:"source"`
 
 	R *questionR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L questionL  `boil:"-" json:"-" toml:"-" yaml:"-"`
 }
 
 var QuestionColumns = struct {
-	ID         string
-	Question   string
-	Answer     string
-	Choices    string
-	Categories string
-	Used       string
-	Source     string
-	Type       string
-	Difficulty string
+	ID       string
+	Question string
+	Answer   string
+	Choices  string
+	Used     string
+	Source   string
 }{
-	ID:         "id",
-	Question:   "question",
-	Answer:     "answer",
-	Choices:    "choices",
-	Categories: "categories",
-	Used:       "used",
-	Source:     "source",
-	Type:       "type",
-	Difficulty: "difficulty",
+	ID:       "id",
+	Question: "question",
+	Answer:   "answer",
+	Choices:  "choices",
+	Used:     "used",
+	Source:   "source",
 }
 
 var QuestionTableColumns = struct {
-	ID         string
-	Question   string
-	Answer     string
-	Choices    string
-	Categories string
-	Used       string
-	Source     string
-	Type       string
-	Difficulty string
+	ID       string
+	Question string
+	Answer   string
+	Choices  string
+	Used     string
+	Source   string
 }{
-	ID:         "questions.id",
-	Question:   "questions.question",
-	Answer:     "questions.answer",
-	Choices:    "questions.choices",
-	Categories: "questions.categories",
-	Used:       "questions.used",
-	Source:     "questions.source",
-	Type:       "questions.type",
-	Difficulty: "questions.difficulty",
+	ID:       "questions.id",
+	Question: "questions.question",
+	Answer:   "questions.answer",
+	Choices:  "questions.choices",
+	Used:     "questions.used",
+	Source:   "questions.source",
 }
 
 // Generated where
@@ -152,49 +137,20 @@ func (w whereHelperint64) NIN(slice []int64) qm.QueryMod {
 	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
 }
 
-type whereHelpernull_String struct{ field string }
-
-func (w whereHelpernull_String) EQ(x null.String) qm.QueryMod {
-	return qmhelper.WhereNullEQ(w.field, false, x)
-}
-func (w whereHelpernull_String) NEQ(x null.String) qm.QueryMod {
-	return qmhelper.WhereNullEQ(w.field, true, x)
-}
-func (w whereHelpernull_String) IsNull() qm.QueryMod    { return qmhelper.WhereIsNull(w.field) }
-func (w whereHelpernull_String) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
-func (w whereHelpernull_String) LT(x null.String) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LT, x)
-}
-func (w whereHelpernull_String) LTE(x null.String) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LTE, x)
-}
-func (w whereHelpernull_String) GT(x null.String) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GT, x)
-}
-func (w whereHelpernull_String) GTE(x null.String) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GTE, x)
-}
-
 var QuestionWhere = struct {
-	ID         whereHelpernull_Int64
-	Question   whereHelperstring
-	Answer     whereHelperstring
-	Choices    whereHelperstring
-	Categories whereHelperstring
-	Used       whereHelperint64
-	Source     whereHelperstring
-	Type       whereHelpernull_String
-	Difficulty whereHelpernull_String
+	ID       whereHelpernull_Int64
+	Question whereHelperstring
+	Answer   whereHelperstring
+	Choices  whereHelperstring
+	Used     whereHelperint64
+	Source   whereHelperstring
 }{
-	ID:         whereHelpernull_Int64{field: "\"questions\".\"id\""},
-	Question:   whereHelperstring{field: "\"questions\".\"question\""},
-	Answer:     whereHelperstring{field: "\"questions\".\"answer\""},
-	Choices:    whereHelperstring{field: "\"questions\".\"choices\""},
-	Categories: whereHelperstring{field: "\"questions\".\"categories\""},
-	Used:       whereHelperint64{field: "\"questions\".\"used\""},
-	Source:     whereHelperstring{field: "\"questions\".\"source\""},
-	Type:       whereHelpernull_String{field: "\"questions\".\"type\""},
-	Difficulty: whereHelpernull_String{field: "\"questions\".\"difficulty\""},
+	ID:       whereHelpernull_Int64{field: "\"questions\".\"id\""},
+	Question: whereHelperstring{field: "\"questions\".\"question\""},
+	Answer:   whereHelperstring{field: "\"questions\".\"answer\""},
+	Choices:  whereHelperstring{field: "\"questions\".\"choices\""},
+	Used:     whereHelperint64{field: "\"questions\".\"used\""},
+	Source:   whereHelperstring{field: "\"questions\".\"source\""},
 }
 
 // QuestionRels is where relationship names are stored.
@@ -214,9 +170,9 @@ func (*questionR) NewStruct() *questionR {
 type questionL struct{}
 
 var (
-	questionAllColumns            = []string{"id", "question", "answer", "choices", "categories", "used", "source", "type", "difficulty"}
+	questionAllColumns            = []string{"id", "question", "answer", "choices", "used", "source"}
 	questionColumnsWithoutDefault = []string{}
-	questionColumnsWithDefault    = []string{"id", "question", "answer", "choices", "categories", "used", "source", "type", "difficulty"}
+	questionColumnsWithDefault    = []string{"id", "question", "answer", "choices", "used", "source"}
 	questionPrimaryKeyColumns     = []string{"id"}
 )
 

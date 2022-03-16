@@ -2,6 +2,8 @@ package triviabot
 
 import (
 	"context"
+	"database/sql"
+	_ "embed"
 	"errors"
 	"fmt"
 	"html/template"
@@ -16,7 +18,10 @@ import (
 	"github.com/jbpratt/bots/internal/bot"
 	"github.com/jbpratt/bots/internal/trivia"
 	"github.com/jbpratt/bots/internal/trivia/models"
+	"github.com/volatiletech/sqlboiler/v4/boil"
 	"go.uber.org/zap"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type TriviaBot struct {
@@ -46,36 +51,49 @@ func New(
 		return nil, fmt.Errorf("error creating bot: %w", err)
 	}
 
-	openTDBSource, err := trivia.NewDefaultOpenTDBSource()
+	//	openTDBSource, err := trivia.NewDefaultOpenTDBSource()
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//
+	//	mdbSource, err := trivia.NewMillionaireDBJSONSource()
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//
+	//	jb3Source, err := trivia.NewJackbox3MurderTriviaJSONSource()
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//
+	//	hqTriviaSource, err := trivia.NewHQTriviaJSONSource()
+	//	if err != nil {
+	//		return nil, err
+	//	}
+
+	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open DB(%s): %w", dbPath, err)
 	}
 
-	mdbSource, err := trivia.NewMillionaireDBJSONSource()
-	if err != nil {
-		return nil, err
-	}
+	boil.SetDB(db)
 
-	jb3Source, err := trivia.NewJackbox3MurderTriviaJSONSource()
+	dbSource, err := trivia.NewDefaultDBSource(db)
 	if err != nil {
-		return nil, err
-	}
-
-	hqTriviaSource, err := trivia.NewHQTriviaJSONSource()
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create db source: %w", err)
 	}
 
 	var lboard *trivia.Leaderboard
-	lboard, err = trivia.NewLeaderboard(logger, dbPath)
+	lboard, err = trivia.NewLeaderboard(logger, db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init leaderboard: %w", err)
 	}
 
 	t := &TriviaBot{
-		logger:                logger,
-		bot:                   bot,
-		sources:               []trivia.Source{openTDBSource, mdbSource, jb3Source, hqTriviaSource},
+		logger:  logger,
+		bot:     bot,
+		sources: []trivia.Source{dbSource},
+		//		sources:               []trivia.Source{openTDBSource, mdbSource, jb3Source, hqTriviaSource},
 		leaderboard:           lboard,
 		leaderboardOutputPath: lboardOutputPath,
 		leaderboardIngress:    lboardIngress,

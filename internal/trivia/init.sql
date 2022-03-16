@@ -12,19 +12,14 @@ CREATE TABLE IF NOT EXISTS users (
 
 /*
   Store trivia questions scraped from external sources. choices is a comma
-  delimited list of all answers and categories is a comma delimited list of
-  categories/tags related to the question. Unique question allows for `INSERT
-  OR IGNORE`.
+  delimited list of all answers. Unique question allows for `INSERT OR IGNORE`.
 */
 CREATE TABLE IF NOT EXISTS questions (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   question     TEXT    NOT NULL,
   answer       TEXT    NOT NULL,
   choices      TEXT    NOT NULL,
-  categories   TEXT    NOT NULL,
   used         INTEGER NOT NULL,
   source       TEXT    NOT NULL,
-  type         TEXT,
-  difficulty   TEXT,
   UNIQUE(question)
 );

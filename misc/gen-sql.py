@@ -7,7 +7,31 @@ from typing import Dict
 from typing import List
 from typing import TextIO
 
-INSERT_LINE = "INSERT OR IGNORE INTO\n\tquestions(question,answer,choices,categories,used,source,type,difficulty)\nVALUES\n"
+INSERT_LINE = "INSERT OR IGNORE INTO\n\tquestions(question,answer,choices,used,source)\nVALUES\n"
+
+
+def hq_trivia_gen(output: TextIO) -> None:
+    path = "misc/hq-trivia.json"
+    data: List[Dict[str, Union[str, List[Dict[str, Union[bool, str]]]]]]
+    with open(path) as file:
+        data = json.load(file)
+
+    values: List[str] = []
+    for row in data:
+        question = row["question"].replace("\"", "\'")
+        correct: str
+        choices: List[str] = []
+        for answer in row["answers"]:
+            if answer["correct"]:
+                correct = answer["text"]
+            choices.append(answer["text"])
+
+        choices_str = ",".join(choices).replace("\"", "\'")
+        values.append(
+            f'\t("{question}","{correct}","{choices_str}",0,"hq-trivia")'
+        )
+
+    output.write(",\n".join(values))
 
 
 def jackbox_3_murder_gen(output: TextIO) -> None:
@@ -23,7 +47,7 @@ def jackbox_3_murder_gen(output: TextIO) -> None:
         choices = ",".join(row["options"]).replace("\"", "\'")
 
         values.append(
-            f'\t("{question}","{answer}","{choices}","",0,"jackbox_3_murder","","")'
+            f'\t("{question}","{answer}","{choices}",0,"jackbox_3_murder")'
         )
 
     output.write(",\n".join(values))
@@ -45,7 +69,7 @@ def millionairedb_gen(output: TextIO) -> None:
         categories = ",".join(list(dict.fromkeys(row["keywords"] + row["tags"])))
 
         values.append(
-            f'\t("{question}","{answer}","{choices}","{categories}",0,"millionairedb","","")'
+            f'\t("{question}","{answer}","{choices}",0,"millionairedb")'
         )
 
     output.write(",\n".join(values))
@@ -71,7 +95,7 @@ def opentdb_gen(output: TextIO) -> None:
         choices = ",".join(answers)
 
         values.append(
-            f'\t("{question}","{correct_answer}","{choices}","{category}",0,"opentdb","{question_type}","{difficulty}")'
+            f'\t("{question}","{correct_answer}","{choices}",0,"opentdb")'
         )
 
     output.write(",\n".join(values))
@@ -86,6 +110,8 @@ def main() -> int:
         opentdb_gen(file)
         file.write(",\n")
         jackbox_3_murder_gen(file)
+        file.write(",\n")
+        hq_trivia_gen(file)
         file.write(";")
 
     return 0

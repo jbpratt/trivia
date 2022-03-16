@@ -17,12 +17,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-//go:embed init.sql
-var initSql string
-
-//go:embed questions.sql
-var questionsSql string
-
 var nextSnowflakeID uint64
 
 // GenerateSnowflake generate a 53 bit locally unique id (from ppspp)
@@ -38,17 +32,7 @@ type Leaderboard struct {
 	rw     sync.RWMutex
 }
 
-func NewLeaderboard(logger *zap.SugaredLogger, path string) (*Leaderboard, error) {
-	db, err := sql.Open("sqlite3", path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open DB(%s): %w", path, err)
-	}
-
-	if _, err = db.ExecContext(context.Background(), initSql+questionsSql); err != nil {
-		return nil, fmt.Errorf("failed to run init sql: %w", err)
-	}
-
-	boil.SetDB(db)
+func NewLeaderboard(logger *zap.SugaredLogger, db *sql.DB) (*Leaderboard, error) {
 	return &Leaderboard{
 		logger: logger,
 		db:     db,

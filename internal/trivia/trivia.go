@@ -60,6 +60,7 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration, source
 	}
 
 	quiz.logger.Info("creating new series of rounds")
+	// bonus := quiz.rng.Intn(10) == 7
 
 	for i := 0; i < size; i++ {
 		src := sources[quiz.rng.Intn(len(sources))]
@@ -192,6 +193,7 @@ type Round struct {
 	Num          int
 	StartedAt    time.Time
 	Final        bool
+	Bonus        bool
 }
 
 func (r *Round) NewParticipant(username string, answer int, timeIn int64) bool {
