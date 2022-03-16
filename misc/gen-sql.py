@@ -7,7 +7,7 @@ from typing import Dict
 from typing import List
 from typing import TextIO
 
-INSERT_LINE = "INSERT OR IGNORE INTO\n\tquestions(question,answer,choices,used,source)\nVALUES\n"
+INSERT_LINE = "INSERT OR IGNORE INTO\n\tquestions(question,answer,choices,source)\nVALUES\n"
 
 
 def hq_trivia_gen(output: TextIO) -> None:
@@ -28,7 +28,7 @@ def hq_trivia_gen(output: TextIO) -> None:
 
         choices_str = ",".join(choices).replace("\"", "\'")
         values.append(
-            f'\t("{question}","{correct}","{choices_str}",0,"hq-trivia")'
+            f'\t("{question}","{correct}","{choices_str}","hq-trivia")'
         )
 
     output.write(",\n".join(values))
@@ -47,7 +47,7 @@ def jackbox_3_murder_gen(output: TextIO) -> None:
         choices = ",".join(row["options"]).replace("\"", "\'")
 
         values.append(
-            f'\t("{question}","{answer}","{choices}",0,"jackbox_3_murder")'
+            f'\t("{question}","{answer}","{choices}","jackbox_3_murder")'
         )
 
     output.write(",\n".join(values))
@@ -69,7 +69,7 @@ def millionairedb_gen(output: TextIO) -> None:
         categories = ",".join(list(dict.fromkeys(row["keywords"] + row["tags"])))
 
         values.append(
-            f'\t("{question}","{answer}","{choices}",0,"millionairedb")'
+            f'\t("{question}","{answer}","{choices}","millionairedb")'
         )
 
     output.write(",\n".join(values))
@@ -95,7 +95,7 @@ def opentdb_gen(output: TextIO) -> None:
         choices = ",".join(answers)
 
         values.append(
-            f'\t("{question}","{correct_answer}","{choices}",0,"opentdb")'
+            f'\t("{question}","{correct_answer}","{choices}","opentdb")'
         )
 
     output.write(",\n".join(values))

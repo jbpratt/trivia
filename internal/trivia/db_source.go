@@ -20,6 +20,7 @@ var questionsSql string
 
 type DBSource struct {
 	cacheSize int
+	offset    int
 	cache     []*Question
 	db        *sql.DB
 }
@@ -63,7 +64,7 @@ func (s *DBSource) refreshCache() error {
 		})
 	}
 
-	// mark the question as used
+	// move cache offset back by cache size
 
 	return nil
 }

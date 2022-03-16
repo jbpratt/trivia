@@ -15,11 +15,15 @@ CREATE TABLE IF NOT EXISTS users (
   delimited list of all answers. Unique question allows for `INSERT OR IGNORE`.
 */
 CREATE TABLE IF NOT EXISTS questions (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  question     TEXT    NOT NULL,
-  answer       TEXT    NOT NULL,
-  choices      TEXT    NOT NULL,
-  used         INTEGER NOT NULL,
-  source       TEXT    NOT NULL,
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_number INTEGER,
+  question        TEXT    NOT NULL,
+  answer          TEXT    NOT NULL,
+  choices         TEXT    NOT NULL,
+  source          TEXT    NOT NULL,
   UNIQUE(question)
 );
+
+WITH t AS (
+  SELECT id, row_number() OVER (ORDER BY random()) AS question_number FROM questions)
+UPDATE questions SET question_number = (SELECT t.question_number FROM t WHERE t.id = questions.id);
