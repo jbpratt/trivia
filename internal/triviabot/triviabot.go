@@ -164,7 +164,7 @@ func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 		return nil
 	}
 
-	if t.quiz.InProgress() {
+	if t.quiz != nil && t.quiz.InProgress() {
 		answer, err := strconv.Atoi(msg.Data)
 		if err != nil {
 			if err = t.bot.SendPriv(
