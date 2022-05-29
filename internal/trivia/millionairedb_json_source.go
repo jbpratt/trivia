@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-//go:embed millionairedb-questions.json
+//go:embed json/millionairedb-questions.json
 var millionaireDBQuestionsJSON []byte
 
 type MillionaireDBQuestion struct {

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-//go:embed hq-trivia.json
+//go:embed json/hq-trivia.json
 var hqTriviaQuestionsJSON []byte
 
 type HQTriviaQuestion struct {

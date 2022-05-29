@@ -17,10 +17,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-//go:embed init.sql
+//go:embed sql/init.sql
 var initSql string
 
-//go:embed questions.sql
+//go:embed sql/questions.sql
 var questionsSql string
 
 var nextSnowflakeID uint64

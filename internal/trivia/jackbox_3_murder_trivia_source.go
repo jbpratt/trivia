@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-//go:embed jackbox-3-murder-trivia.json
+//go:embed json/jackbox-3-murder-trivia.json
 var jackbox3MurderTriviaQuestionsJSON []byte
 
 type Jackbox3MurderTriviaQuestion struct {
