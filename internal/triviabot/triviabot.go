@@ -168,7 +168,7 @@ func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 		answer, err := strconv.Atoi(msg.Data)
 		if err != nil {
 			if err = t.bot.SendPriv(
-				"Invalid answer NOPPERS whisper the number of the answer. `/w trivia 2`",
+				"Invalid answer NOPERS whisper the number of the answer. `/w trivia 2`",
 				msg.User,
 			); err != nil {
 				return err
