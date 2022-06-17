@@ -7,12 +7,14 @@ import (
 
 	"github.com/jbpratt/bots/internal/triviabot"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func main() {
 	serverURL := "wss://chat.strims.gg/ws"
 	dbPath := flag.String("db", "/tmp/trivia.db", "path to sqlite database")
 	dev := flag.Bool("dev", false, "use chat2")
+	lvl := zap.LevelFlag("v", zapcore.InfoLevel, "set the log level")
 	leaderboardPage := flag.String("html", "/tmp/leaderboard/index.html", "path to output generated leaderboard page")
 	leaderboardIngress := flag.String("ingress", "https://leaderboard.jbpratt.xyz", "leaderboard ingress URL")
 
@@ -22,12 +24,16 @@ func main() {
 		serverURL = "wss://chat2.strims.gg/ws"
 	}
 
-	logger, err := zap.NewProduction()
-	if err != nil {
-		log.Fatal(err)
-	}
+	encoderCfg := zap.NewProductionEncoderConfig()
+	atom := zap.NewAtomicLevelAt(*lvl)
+	logger := zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(encoderCfg),
+		zapcore.Lock(os.Stdout),
+		atom,
+	))
+
 	defer func() {
-		if err = logger.Sync(); err != nil {
+		if err := logger.Sync(); err != nil {
 			log.Fatal(err)
 		}
 	}()
