@@ -114,9 +114,8 @@ func (s *DBSource) refreshCache(ctx context.Context) error {
 		s.cache = append(s.cache, q)
 	}
 
-	sequence.N += 3
-	if _, err = sequence.UpdateG(ctx, boil.Whitelist("n")); err != nil {
-		return fmt.Errorf("failed to update question_sequence: %w", err)
+	if _, err = s.db.ExecContext(ctx, "UPDATE question_sequence SET n = n + ?", 3); err != nil {
+		return fmt.Errorf("failed to increment question sequence: %w", err)
 	}
 
 	return nil
