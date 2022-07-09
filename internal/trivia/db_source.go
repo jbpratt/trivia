@@ -50,16 +50,15 @@ CREATE TABLE IF NOT EXISTS question_sequence (
 `
 
 type DBSource struct {
-	cacheSize int
-	cache     []*Question
-	db        *sql.DB
+	cache []*Question
+	db    *sql.DB
 }
 
 func NewDefaultDBSource(db *sql.DB) (*DBSource, error) {
-	return NewDBSource(db, 6)
+	return NewDBSource(db)
 }
 
-func NewDBSource(db *sql.DB, cacheSize int) (*DBSource, error) {
+func NewDBSource(db *sql.DB) (*DBSource, error) {
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx, sqlQuestionTable+sqlQuestionsEntries); err != nil {
 		return nil, fmt.Errorf("failed to run init sql: %w", err)
@@ -80,7 +79,7 @@ func NewDBSource(db *sql.DB, cacheSize int) (*DBSource, error) {
 		}
 	}
 
-	return &DBSource{cacheSize: cacheSize, db: db}, nil
+	return &DBSource{db: db}, nil
 }
 
 func (s *DBSource) refreshCache(ctx context.Context) error {
@@ -92,7 +91,7 @@ func (s *DBSource) refreshCache(ctx context.Context) error {
 	questions, err := models.Questions(
 		qm.Where("question_number > ?", sequence.N),
 		qm.OrderBy("question_number asc"),
-		qm.Limit(s.cacheSize),
+		qm.Limit(3),
 	).AllG(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to query questions: %w", err)
@@ -115,7 +114,7 @@ func (s *DBSource) refreshCache(ctx context.Context) error {
 		s.cache = append(s.cache, q)
 	}
 
-	sequence.N += int64(s.cacheSize)
+	sequence.N += 3
 	if _, err = sequence.UpdateG(ctx, boil.Whitelist("n")); err != nil {
 		return fmt.Errorf("failed to update question_sequence: %w", err)
 	}
