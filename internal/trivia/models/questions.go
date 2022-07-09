@@ -31,6 +31,7 @@ type Question struct {
 	Choices        string      `boil:"choices" json:"choices" toml:"choices" yaml:"choices"`
 	Source         string      `boil:"source" json:"source" toml:"source" yaml:"source"`
 	Type           null.String `boil:"type" json:"type,omitempty" toml:"type" yaml:"type,omitempty"`
+	Removed        string      `boil:"removed" json:"removed" toml:"removed" yaml:"removed"`
 
 	R *questionR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L questionL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -44,6 +45,7 @@ var QuestionColumns = struct {
 	Choices        string
 	Source         string
 	Type           string
+	Removed        string
 }{
 	ID:             "id",
 	QuestionNumber: "question_number",
@@ -52,6 +54,7 @@ var QuestionColumns = struct {
 	Choices:        "choices",
 	Source:         "source",
 	Type:           "type",
+	Removed:        "removed",
 }
 
 var QuestionTableColumns = struct {
@@ -62,6 +65,7 @@ var QuestionTableColumns = struct {
 	Choices        string
 	Source         string
 	Type           string
+	Removed        string
 }{
 	ID:             "questions.id",
 	QuestionNumber: "questions.question_number",
@@ -70,6 +74,7 @@ var QuestionTableColumns = struct {
 	Choices:        "questions.choices",
 	Source:         "questions.source",
 	Type:           "questions.type",
+	Removed:        "questions.removed",
 }
 
 // Generated where
@@ -153,6 +158,7 @@ var QuestionWhere = struct {
 	Choices        whereHelperstring
 	Source         whereHelperstring
 	Type           whereHelpernull_String
+	Removed        whereHelperstring
 }{
 	ID:             whereHelpernull_Int64{field: "\"questions\".\"id\""},
 	QuestionNumber: whereHelperint64{field: "\"questions\".\"question_number\""},
@@ -161,6 +167,7 @@ var QuestionWhere = struct {
 	Choices:        whereHelperstring{field: "\"questions\".\"choices\""},
 	Source:         whereHelperstring{field: "\"questions\".\"source\""},
 	Type:           whereHelpernull_String{field: "\"questions\".\"type\""},
+	Removed:        whereHelperstring{field: "\"questions\".\"removed\""},
 }
 
 // QuestionRels is where relationship names are stored.
@@ -180,9 +187,9 @@ func (*questionR) NewStruct() *questionR {
 type questionL struct{}
 
 var (
-	questionAllColumns            = []string{"id", "question_number", "question", "answer", "choices", "source", "type"}
+	questionAllColumns            = []string{"id", "question_number", "question", "answer", "choices", "source", "type", "removed"}
 	questionColumnsWithoutDefault = []string{}
-	questionColumnsWithDefault    = []string{"id", "question_number", "question", "answer", "choices", "source", "type"}
+	questionColumnsWithDefault    = []string{"id", "question_number", "question", "answer", "choices", "source", "type", "removed"}
 	questionPrimaryKeyColumns     = []string{"id"}
 	questionGeneratedColumns      = []string{}
 )

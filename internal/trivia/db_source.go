@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS questions (
   choices         TEXT    NOT NULL,
   source          TEXT    NOT NULL,
   type            TEXT,
+  removed         TINYINT(1) NOT NULL DEFAULT 0,
   UNIQUE(question)
 );
 
