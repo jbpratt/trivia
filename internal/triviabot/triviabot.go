@@ -329,7 +329,7 @@ const tpl = `
     <title>Strims Trivia Leaderboard</title>
   </head>
   <body>
-    <h3>Season 2</h3>
+    <h3>Season 3</h3>
     <small>Generated at {{ .TemplatedAt.Format "Jan 02, 2006 15:04:05 UTC" }}</small>
     <table>
       <tr>
@@ -346,6 +346,75 @@ const tpl = `
         <td>{{divide .Points .GamesPlayed}}</td>
       </tr>
 {{end}}
+    </table>
+    <h3>Season 2 top 10</h3>
+    <table>
+      <tr>
+        <th>Username</th>
+        <th>Points</th>
+        <th>Games</th>
+        <th>Points/Game</th>
+      </tr>
+      <tr>
+        <td>tahley</td>
+        <td>7753</td>
+        <td>790</td>
+        <td>9.813924</td>
+      </tr>
+      <tr>
+        <td>salad</td>
+        <td>5981</td>
+        <td>748</td>
+        <td>7.9959893</td>
+      </tr>
+      <tr>
+        <td>Nhabls</td>
+        <td>3659</td>
+        <td>381</td>
+        <td>9.603675</td>
+      </tr>
+      <tr>
+        <td>bawrroccoli</td>
+        <td>1149</td>
+        <td>158</td>
+        <td>7.272152</td>
+      </tr>
+      <tr>
+        <td>mocha_z</td>
+        <td>996</td>
+        <td>147</td>
+        <td>6.7755103</td>
+      </tr>
+      <tr>
+        <td>laetus</td>
+        <td>452</td>
+        <td>86</td>
+        <td>5.255814</td>
+      </tr>
+      <tr>
+        <td>Gehirnchirurg</td>
+        <td>435</td>
+        <td>30</td>
+        <td>14.5</td>
+      </tr>
+      <tr>
+        <td>blankspaceblank</td>
+        <td>371</td>
+        <td>63</td>
+        <td>5.888889</td>
+      </tr>
+      <tr>
+        <td>haxzur</td>
+        <td>347</td>
+        <td>47</td>
+        <td>7.382979</td>
+      </tr>
+      <tr>
+        <td>rallen</td>
+        <td>321</td>
+        <td>37</td>
+        <td>8.675675</td>
+      </tr>
     </table>
     <hr class="solid">
     <h3>Season 1 top 10</h3>
