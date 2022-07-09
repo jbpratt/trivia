@@ -3,11 +3,8 @@ package trivia
 import (
 	"context"
 	"database/sql"
-	_ "embed"
 	"fmt"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/jbpratt/bots/internal/trivia/models"
 	"github.com/volatiletech/sqlboiler/v4/boil"
@@ -17,20 +14,19 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-//go:embed sql/init.sql
-var initSql string
-
-//go:embed sql/questions.sql
-var questionsSql string
-
-var nextSnowflakeID uint64
-
-// GenerateSnowflake generate a 53 bit locally unique id (from ppspp)
-func generateSnowflake() uint64 {
-	seconds := uint64(time.Since(time.Date(2020, 0, 0, 0, 0, 0, 0, time.UTC)) / time.Second)
-	sequence := atomic.AddUint64(&nextSnowflakeID, 1) << 32
-	return (seconds | sequence) & 0x1fffffffffffff
-}
+const sqlUserTable = `
+/*
+  Store users who have played a game of trivia and their total points
+  over the history of playing. Sorting this table by points allows
+  for determining an overall leaderboard.
+*/
+CREATE TABLE IF NOT EXISTS users (
+  id           INTEGER NOT NULL PRIMARY KEY,
+  name         TEXT    NOT NULL,
+  points       INTEGER NOT NULL,
+  games_played INTEGER NOT NULL
+);
+`
 
 type Leaderboard struct {
 	logger *zap.SugaredLogger
@@ -38,17 +34,10 @@ type Leaderboard struct {
 	rw     sync.RWMutex
 }
 
-func NewLeaderboard(logger *zap.SugaredLogger, path string) (*Leaderboard, error) {
-	db, err := sql.Open("sqlite3", path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open DB(%s): %w", path, err)
-	}
-
-	if _, err = db.ExecContext(context.Background(), initSql+questionsSql); err != nil {
+func NewLeaderboard(logger *zap.SugaredLogger, db *sql.DB) (*Leaderboard, error) {
+	if _, err := db.ExecContext(context.Background(), sqlUserTable); err != nil {
 		return nil, fmt.Errorf("failed to run init sql: %w", err)
 	}
-
-	boil.SetDB(db)
 	return &Leaderboard{
 		logger: logger,
 		db:     db,
@@ -91,7 +80,6 @@ func (l *Leaderboard) Update(entries map[string]int) error {
 			}
 		} else {
 			user = &models.User{
-				ID:          int64(generateSnowflake()),
 				Name:        name,
 				Points:      int64(points),
 				GamesPlayed: 1,
