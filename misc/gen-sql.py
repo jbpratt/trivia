@@ -10,22 +10,6 @@ from typing import TextIO
 INSERT_LINE = "INSERT OR IGNORE INTO\n\tquestions(question,answer,choices,source,type)\nVALUES\n"
 
 
-def wwtbam_gen(output: TextIO) -> None:
-    path = "internal/trivia/json/wwtbam.json"
-    data: List[Dict[str, str]]
-    with open(path) as file:
-        data = json.load(file)
-
-    values: List[str] = []
-    for row in data:
-        question = row["question"]
-        choices = ",".join([row["A"], row["B"], row["C"], row["D"]])
-        answer = row[row["answer"]]
-        values.append(f'\t("{question}","{answer}","{choices}","wwtbam","")')
-
-    output.write(",\n".join(values))
-
-
 def jackbox_3_murder_gen(output: TextIO) -> None:
     path = "internal/trivia/json/jackbox-3-murder-trivia.json"
     data: List[Dict[str, Union[str, List[str]]]]
@@ -93,8 +77,6 @@ def main() -> int:
         opentdb_gen(file)
         file.write(",\n")
         jackbox_3_murder_gen(file)
-        file.write(",\n")
-        wwtbam_gen(file)
         file.write(";")
 
     return 0
