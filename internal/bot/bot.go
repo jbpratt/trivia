@@ -39,10 +39,11 @@ type Bot struct {
 }
 
 type Msg struct {
-	Kind string `json:"-"`
-	Data string `json:"data"`
-	User string `json:"nick,omitempty"`
-	Time int64  `json:"timestamp,omitempty"`
+	Kind     string   `json:"-"`
+	Data     string   `json:"data"`
+	User     string   `json:"nick,omitempty"`
+	Time     int64    `json:"timestamp,omitempty"`
+	Features []string `json:"features,omitempty"`
 }
 
 func New(
@@ -232,4 +233,13 @@ func (b *Bot) send(msg string) error {
 		return fmt.Errorf("failed to write message: %w", err)
 	}
 	return nil
+}
+
+func (m Msg) IsMod() bool {
+	for _, feature := range m.Features {
+		if feature == "moderator" {
+			return true
+		}
+	}
+	return false
 }

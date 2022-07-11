@@ -62,8 +62,7 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration, source
 	quiz.logger.Info("creating new series of rounds")
 
 	for i := 0; i < size; i++ {
-		src := sources[quiz.rng.Intn(len(sources))]
-		question, err := src.Question()
+		question, err := source.Question()
 		if err != nil {
 			return nil, err
 		}

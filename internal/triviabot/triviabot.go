@@ -24,7 +24,7 @@ import (
 type TriviaBot struct {
 	logger                *zap.SugaredLogger
 	bot                   *bot.Bot
-	sources               []trivia.Source
+	source                trivia.Source
 	quiz                  *trivia.Quiz
 	leaderboard           *trivia.Leaderboard
 	lastQuizEndedAt       time.Time
@@ -55,7 +55,7 @@ func New(
 
 	boil.SetDB(db)
 
-	dbSource, err := trivia.NewDefaultDBSource(db)
+	source, err := trivia.NewDefaultDBSource(db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create DB source: %w", err)
 	}
@@ -69,7 +69,7 @@ func New(
 	t := &TriviaBot{
 		logger:                logger,
 		bot:                   bot,
-		sources:               []trivia.Source{dbSource},
+		source:                source,
 		leaderboard:           lboard,
 		leaderboardOutputPath: lboardOutputPath,
 		leaderboardIngress:    lboardIngress,
@@ -134,7 +134,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 		}
 
 		// TODO: allow for providing quiz size
-		quiz, err := trivia.NewDefaultQuiz(t.logger, t.sources...)
+		quiz, err := trivia.NewDefaultQuiz(t.logger, t.source)
 		if err != nil {
 			return fmt.Errorf("failed to create a new quiz: %w", err)
 		}
@@ -153,9 +153,17 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 	t.logger.Debugw("private message received", "user", msg.User, "msg", msg.Data)
 
-	if strings.HasPrefix(msg.Data, "!disable") /* && msg.IsMod() */ {
-		// question := strings.TrimPrefix(msg.Data, "!disable")
-		return nil
+	if strings.HasPrefix(msg.Data, "remove") && msg.IsMod() {
+		question := strings.TrimPrefix(msg.Data, "remove ")
+		if question == "" {
+			return t.bot.SendPriv("invalid question data", msg.User)
+		}
+
+		if err := t.setQuestionRemoved(ctx, question); err != nil {
+			return t.bot.SendPriv(fmt.Sprintf("Error: %q", err), msg.User)
+		}
+
+		return t.bot.SendPriv("PepOk removed", msg.User)
 	}
 
 	if t.quiz != nil && t.quiz.InProgress() {
@@ -531,5 +539,17 @@ func (t *TriviaBot) generateLeaderboardPage() error {
 		return fmt.Errorf("failed to close file: %w", err)
 	}
 
+	return nil
+}
+
+func (t *TriviaBot) setQuestionRemoved(ctx context.Context, question string) error {
+	q, err := models.Questions(models.QuestionWhere.Question.EQ(question)).OneG(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to find question: %w", err)
+	}
+	q.Removed = "1"
+	if _, err = q.UpdateG(ctx, boil.Infer()); err != nil {
+		return fmt.Errorf("failed to update question in db: %w", err)
+	}
 	return nil
 }
