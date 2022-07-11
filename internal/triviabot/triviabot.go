@@ -97,11 +97,9 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 	}
 
 	if strings.Contains(msg.Data, "help") || strings.Contains(msg.Data, "info") {
-		if err := t.bot.Send(
+		return t.bot.Send(
 			"Start a new round with `trivia start`. Whisper me the number beside the answer `/w trivia 2`.",
-		); err != nil {
-			return fmt.Errorf("failed to send help msg: %w", err)
-		}
+		)
 	}
 
 	// TODO: when someone answer in public chat, send PM instructing user how to
@@ -110,27 +108,18 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 	// }
 
 	if strings.Contains(msg.Data, "leaderboard") || strings.Contains(msg.Data, "highscore") {
-		if err := t.bot.Send(t.leaderboardIngress); err != nil {
-			return fmt.Errorf("error sending leaderboard link: %w", err)
-		}
-		return nil
+		return t.bot.Send(t.leaderboardIngress)
 	}
 
 	if strings.Contains(msg.Data, "start") || strings.Contains(msg.Data, "new") {
 		if t.quiz != nil && t.quiz.InProgress() {
-			if err := t.bot.Send("a quiz is already in progress"); err != nil {
-				return fmt.Errorf("failed to send quiz in progress msg: %w", err)
-			}
-			return nil
+			return t.bot.Send("a quiz is already in progress")
 		}
 
 		fiveMinAgo := time.Now().Add(-5 * time.Minute)
 		if t.lastQuizEndedAt.After(fiveMinAgo) {
 			timeLeft := t.lastQuizEndedAt.Sub(fiveMinAgo).Round(time.Second)
-			if err := t.bot.Send(fmt.Sprintf("on cooldown for %s PepoSleep", timeLeft)); err != nil {
-				return fmt.Errorf("failed to send quiz in progress msg: %w", err)
-			}
-			return nil
+			return t.bot.Send(fmt.Sprintf("on cooldown for %s PepoSleep", timeLeft))
 		}
 
 		// TODO: allow for providing quiz size
@@ -169,26 +158,17 @@ func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 	if t.quiz != nil && t.quiz.InProgress() {
 		answer, err := strconv.Atoi(msg.Data)
 		if err != nil {
-			if err = t.bot.SendPriv(
+			return t.bot.SendPriv(
 				"Invalid answer NOPERS whisper the number of the answer. `/w trivia 2`",
 				msg.User,
-			); err != nil {
-				return err
-			}
-			return nil
+			)
 		}
 
 		if !t.quiz.CurrentRound().NewParticipant(msg.User, answer-1, msg.Time) {
-			if err = t.bot.SendPriv(
-				"Your answer is invalid or you have already submitted one!", msg.User,
-			); err != nil {
-				return err
-			}
-		} else {
-			if err = t.bot.SendPriv("Your answer has been locked in", msg.User); err != nil {
-				return err
-			}
+			return t.bot.SendPriv("Your answer is invalid or you have already submitted one!", msg.User)
 		}
+
+		return t.bot.SendPriv("Your answer has been locked in", msg.User)
 	}
 
 	return nil

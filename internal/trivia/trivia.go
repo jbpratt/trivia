@@ -104,7 +104,7 @@ func (q *Quiz) StartRound(
 	q.rw.Unlock()
 
 	if q.currentRound >= len(q.Rounds) {
-		return nil, fmt.Errorf("quiz is already complete")
+		return nil, errors.New("quiz is already complete")
 	}
 	round := q.Rounds[q.currentRound]
 	question := round.Question
