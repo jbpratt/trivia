@@ -41,6 +41,7 @@ func New(
 		bot.QuitFilter,
 		bot.ViewerStateFilter,
 		bot.NamesFilter,
+		bot.PrivMsgSentFilter,
 	}
 
 	bot, err := bot.New(logger, url, jwt, true, filters...)

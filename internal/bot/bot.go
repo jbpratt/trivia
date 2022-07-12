@@ -20,6 +20,7 @@ type MsgTypeFilter string
 var (
 	MsgFilter         MsgTypeFilter = "MSG"
 	PrivMsgFilter     MsgTypeFilter = "PRIVMSG"
+	PrivMsgSentFilter MsgTypeFilter = "PRIVMSGSENT"
 	NamesFilter       MsgTypeFilter = "NAMES"
 	JoinFilter        MsgTypeFilter = "QUIT"
 	QuitFilter        MsgTypeFilter = "JOIN"
