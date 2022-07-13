@@ -46,11 +46,11 @@ type Quiz struct {
 	Scoreboard   map[string]int
 }
 
-func NewDefaultQuiz(logger *zap.SugaredLogger, sources ...Source) (*Quiz, error) {
-	return NewQuiz(logger, 3, 30*time.Second, sources...)
+func NewDefaultQuiz(logger *zap.SugaredLogger, source Source) (*Quiz, error) {
+	return NewQuiz(logger, 3, 30*time.Second, source)
 }
 
-func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration, sources ...Source) (*Quiz, error) {
+func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration, source Source) (*Quiz, error) {
 	quiz := &Quiz{
 		duration:     duration,
 		logger:       logger,
