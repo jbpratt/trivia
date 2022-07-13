@@ -1,17 +1,17 @@
-FROM	docker.io/library/golang:1.16-buster	as	build
+FROM	docker.io/library/golang:1.18-buster	as	build
 MAINTAINER	jbpratt <jbpratt78@gmail.com>
 LABEL org.opencontainers.image.source https://github.com/jbpratt/bots
 
-ARG	BOT
 ENV	GO111MODULE	on
 
 WORKDIR	/go/src/bots
-COPY	.	/go/src/bots
+COPY go.mod go.sum	.
+COPY cmd/ cmd/
+COPY internal/ internal/
 
-RUN go get -d -v ./...
+RUN go mod download
+RUN CGO_ENABLED=1 go build -o /go/bin/bot ./cmd/triviabot/
 
-RUN CGO_ENABLED=1 go build -o /go/bin/bot ./cmd/${BOT}/
-
-FROM	gcr.io/distroless/base-debian10:latest
+FROM	gcr.io/distroless/base-debian11:latest
 COPY	--from=build /go/bin/bot	/
 ENTRYPOINT	["/bot"]
