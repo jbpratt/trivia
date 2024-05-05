@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -95,6 +96,10 @@ func (s *DBSource) refreshCache(ctx context.Context) error {
 	).AllG(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to query questions: %w", err)
+	}
+
+	if len(questions) == 0 {
+		return errors.New("no questions found in database")
 	}
 
 	for _, question := range questions {
