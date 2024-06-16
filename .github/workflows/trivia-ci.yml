@@ -4,12 +4,14 @@ on:
   push:
     branches: [ main ]
     paths:
+      - go.mod
       - 'cmd/triviabot/*'
       - 'internal/trivia*'
       - 'internal/bot/*'
   pull_request:
     branches: [ main ]
     paths:
+      - go.mod
       - 'cmd/triviabot/*'
       - 'internal/trivia*'
       - 'internal/bot/*'

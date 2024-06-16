@@ -3,6 +3,7 @@ name: CD - triviabot
 on:
   push:
     paths:
+      - go.mod
       - 'cmd/triviabot/*'
       - 'internal/trivia/*'
       - 'internal/triviabot/*'
