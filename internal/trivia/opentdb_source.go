@@ -4,7 +4,7 @@ package trivia
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 )
@@ -33,7 +33,7 @@ func NewOpenTDBSource(cacheSize int) (*OpenTDBSource, error) {
 		return nil, fmt.Errorf("server returned invalid http code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read token response body: %w", err)
 	}
