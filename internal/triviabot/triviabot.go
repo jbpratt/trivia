@@ -44,7 +44,7 @@ func New(
 		bot.PrivMsgSentFilter,
 	}
 
-	bot, err := bot.New(logger, url, jwt, true, filters...)
+	bot, err := bot.New(logger, bot.WebSocketDialer, url, jwt, true, filters...)
 	if err != nil {
 		return nil, fmt.Errorf("error creating bot: %w", err)
 	}

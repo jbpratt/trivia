@@ -29,7 +29,8 @@ var (
 
 type Bot struct {
 	logger         *zap.SugaredLogger
-	conn           *websocket.Conn
+	conn           WebsocketConn
+	dialer         Dialer
 	reconnect      bool
 	lastSentMsg    string
 	url            string
@@ -47,14 +48,28 @@ type Msg struct {
 	Features []string `json:"features,omitempty"`
 }
 
+type WebsocketConn interface {
+	Read(ctx context.Context) (websocket.MessageType, []byte, error)
+	Write(ctx context.Context, messageType websocket.MessageType, data []byte) error
+	Close(code websocket.StatusCode, reason string) error
+}
+
+type Dialer func(ctx context.Context, url string, opts *websocket.DialOptions) (WebsocketConn, *http.Response, error)
+
+func WebSocketDialer(ctx context.Context, url string, opts *websocket.DialOptions) (WebsocketConn, *http.Response, error) {
+	return websocket.Dial(ctx, url, opts)
+}
+
 func New(
 	logger *zap.SugaredLogger,
+	dialer Dialer,
 	url, jwt string,
 	reconnect bool,
 	filters ...MsgTypeFilter,
 ) (*Bot, error) {
 	b := &Bot{
 		logger:    logger,
+		dialer:    dialer,
 		reconnect: reconnect,
 		filters:   filters,
 		url:       url,
@@ -67,7 +82,9 @@ func New(
 }
 
 func (b *Bot) dial(url, jwt string) error {
-	c, _, err := websocket.Dial(context.Background(), url,
+	c, _, err := b.dialer(
+		context.Background(),
+		url,
 		&websocket.DialOptions{
 			HTTPHeader: http.Header{
 				"Cookie": []string{fmt.Sprintf("jwt=%s", jwt)},
