@@ -5,7 +5,7 @@ go 1.22
 require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/friendsofgo/errors v0.9.2
-	github.com/mattn/go-sqlite3 v1.14.22
+	github.com/mattn/go-sqlite3 v1.14.23
 	github.com/stretchr/testify v1.9.0
 	github.com/volatiletech/null/v8 v8.1.2
 	github.com/volatiletech/sqlboiler/v4 v4.16.2
