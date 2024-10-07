@@ -12,7 +12,7 @@ require (
 	github.com/volatiletech/strmangle v0.0.6
 	go.uber.org/zap v1.27.0
 	golang.org/x/sync v0.8.0
-	nhooyr.io/websocket v1.8.11
+	nhooyr.io/websocket v1.8.17
 )
 
 require (
