@@ -8,71 +8,34 @@ on:
       - 'internal/trivia/*'
       - 'internal/triviabot/*'
       - 'internal/bot/*'
-      - 'Dockerfile'
     branches: [ main ]
 
 env:
-  IMAGE_NAME: ghcr.io/jbpratt/bots/triviabot
-  IMAGE_TAG: latest
-  BOT: triviabot
+  KO_DOCKER_REPO: ghcr.io/jbpratt/bots/triviabot
 
 jobs:
   build:
-    name: Build and push multi-arch images
+    name: Build and push image
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [ amd64, arm64 ]
     steps:
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
     - uses: actions/checkout@v4
 
-    - name: Log in to ghcr.io
-      uses: redhat-actions/podman-login@v1
+    - name: Setup Go
+      uses: actions/setup-go@v5
       with:
+        go-version-file: 'go.mod'
+        check-latest: true
+
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-        registry: ghcr.io
 
-    - name: Buildah Action
-      id: build-image
-      uses: redhat-actions/buildah-build@v2
-      with:
-        image: ${{ env.IMAGE_NAME }}
-        tags: ${{ env.IMAGE_TAG }}-${{ matrix.arch }}
-        arch: ${{ matrix.arch }}
-        oci: true
-        build-args: |
-          ARCH=${{ matrix.arch }}
-          BOT=${{ env.BOT }}
-        dockerfiles: |
-          ./Dockerfile
+    - name: Setup ko
+      uses: ko-build/setup-ko@v0.6
 
-    - name: Push to ghcr
-      uses: redhat-actions/push-to-registry@v2
-      with:
-        image: ${{ steps.build-image.outputs.image }}
-        tags: ${{ steps.build-image.outputs.tags }}
-        registry: ghcr.io
-
-  publish:
-    name: Publish manifest
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - name: Log in to ghcr.io
-      uses: redhat-actions/podman-login@v1
-      with:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-        registry: ghcr.io
-
-    - name: Create and publish image manifest
+    - name: Build and push image
       run: |
-        set -x
-        podman manifest create ${BOT}:latest
-        podman manifest add ${BOT}:latest docker://${IMAGE_NAME}:${IMAGE_TAG}-amd64
-        podman manifest add ${BOT}:latest docker://${IMAGE_NAME}:${IMAGE_TAG}-arm64
-        podman manifest push ${BOT}:latest docker://${IMAGE_NAME}:${IMAGE_TAG}
+        ko build --platform=linux/amd64,linux/arm64 --bare ./cmd/triviabot
