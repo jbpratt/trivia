@@ -2,8 +2,8 @@ package bot
 
 import (
 	"context"
+	"github.com/coder/websocket"
 	"github.com/stretchr/testify/mock"
-	"nhooyr.io/websocket"
 )
 
 type MockWebSocketConn struct {

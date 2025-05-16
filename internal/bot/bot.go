@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/coder/websocket"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"nhooyr.io/websocket"
 )
 
 type MsgTypeFilter string
