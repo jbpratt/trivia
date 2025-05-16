@@ -34,8 +34,8 @@ type Leaderboard struct {
 	rw     sync.RWMutex
 }
 
-func NewLeaderboard(logger *zap.SugaredLogger, db *sql.DB) (*Leaderboard, error) {
-	if _, err := db.ExecContext(context.Background(), sqlUserTable); err != nil {
+func NewLeaderboard(ctx context.Context, logger *zap.SugaredLogger, db *sql.DB) (*Leaderboard, error) {
+	if _, err := db.ExecContext(ctx, sqlUserTable); err != nil {
 		return nil, fmt.Errorf("failed to run init sql: %w", err)
 	}
 	return &Leaderboard{
@@ -44,13 +44,12 @@ func NewLeaderboard(logger *zap.SugaredLogger, db *sql.DB) (*Leaderboard, error)
 	}, nil
 }
 
-func (l *Leaderboard) Update(entries map[string]int) error {
+func (l *Leaderboard) Update(ctx context.Context, entries map[string]int) error {
 	l.rw.Lock()
 	defer l.rw.Unlock()
 
 	l.logger.Info("updating leaderboard with entries: %v", entries)
 
-	ctx := context.Background()
 	tx, err := l.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -98,11 +97,10 @@ func (l *Leaderboard) Update(entries map[string]int) error {
 	return nil
 }
 
-func (l *Leaderboard) Highscores(limit int) (models.UserSlice, error) {
+func (l *Leaderboard) Highscores(ctx context.Context, limit int) (models.UserSlice, error) {
 	l.rw.RLock()
 	defer l.rw.RUnlock()
 
-	ctx := context.Background()
 	if limit == 0 {
 		size, err := models.Users().CountG(ctx)
 		if err != nil {

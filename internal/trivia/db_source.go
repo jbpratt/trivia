@@ -55,12 +55,11 @@ type DBSource struct {
 	db    *sql.DB
 }
 
-func NewDefaultDBSource(db *sql.DB) (*DBSource, error) {
-	return NewDBSource(db)
+func NewDefaultDBSource(ctx context.Context, db *sql.DB) (*DBSource, error) {
+	return NewDBSource(ctx, db)
 }
 
-func NewDBSource(db *sql.DB) (*DBSource, error) {
-	ctx := context.Background()
+func NewDBSource(ctx context.Context, db *sql.DB) (*DBSource, error) {
 	if _, err := db.ExecContext(ctx, sqlQuestionTable+sqlQuestionsEntries); err != nil {
 		return nil, fmt.Errorf("failed to run init sql: %w", err)
 	}
@@ -126,9 +125,9 @@ func (s *DBSource) refreshCache(ctx context.Context) error {
 	return nil
 }
 
-func (s *DBSource) Question() (*Question, error) {
+func (s *DBSource) Question(ctx context.Context) (*Question, error) {
 	if len(s.cache) == 0 {
-		if err := s.refreshCache(context.Background()); err != nil {
+		if err := s.refreshCache(ctx); err != nil {
 			return nil, err
 		}
 	}

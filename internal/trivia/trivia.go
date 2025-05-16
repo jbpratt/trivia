@@ -2,8 +2,10 @@
 package trivia
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math/rand"
 	"sort"
 	"strings"
@@ -14,7 +16,7 @@ import (
 )
 
 type Source interface {
-	Question() (*Question, error)
+	Question(ctx context.Context) (*Question, error)
 }
 
 type Question struct {
@@ -47,11 +49,11 @@ type Quiz struct {
 	Scoreboard map[string]int
 }
 
-func NewDefaultQuiz(logger *zap.SugaredLogger, source Source) (*Quiz, error) {
-	return NewQuiz(logger, 3, 30*time.Second, source)
+func NewDefaultQuiz(ctx context.Context, logger *zap.SugaredLogger, source Source) (*Quiz, error) {
+	return NewQuiz(ctx, logger, 3, 30*time.Second, source)
 }
 
-func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration, source Source) (*Quiz, error) {
+func NewQuiz(ctx context.Context, logger *zap.SugaredLogger, size int, duration time.Duration, source Source) (*Quiz, error) {
 	quiz := &Quiz{
 		duration:     duration,
 		logger:       logger,
@@ -62,8 +64,8 @@ func NewQuiz(logger *zap.SugaredLogger, size int, duration time.Duration, source
 
 	quiz.logger.Info("creating new series of rounds")
 
-	for i := 0; i < size; i++ {
-		question, err := source.Question()
+	for i := range size {
+		question, err := source.Question(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -90,7 +92,8 @@ func (q *Quiz) InProgress() bool {
 }
 
 func (q *Quiz) StartRound(
-	onComplete func(string, []*Participant) error,
+	ctx context.Context,
+	onComplete func(context.Context, string, []*Participant) error,
 ) (*Round, error) {
 	if q.InProgress() {
 		return nil, errors.New("a quiz is already in progress")
@@ -158,7 +161,7 @@ func (q *Quiz) StartRound(
 
 		q.logger.Infof("the correct answer is %q", correct)
 
-		if err := onComplete(correct, winners); err != nil {
+		if err := onComplete(ctx, correct, winners); err != nil {
 			q.logger.Fatalf("failed to run onComplete: %v", err)
 		}
 
@@ -176,10 +179,7 @@ func (q *Quiz) Score() map[string]int {
 	defer q.rw.RUnlock()
 
 	data := map[string]int{}
-	for name, points := range q.Scoreboard {
-		data[name] = points
-	}
-
+	maps.Copy(data, q.Scoreboard)
 	return data
 }
 

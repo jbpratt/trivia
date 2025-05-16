@@ -35,6 +35,7 @@ type TriviaBot struct {
 }
 
 func New(
+	ctx context.Context,
 	logger *zap.SugaredLogger,
 	url, jwt, dbPath, lboardOutputPath, lboardIngress string,
 ) (*TriviaBot, error) {
@@ -46,7 +47,7 @@ func New(
 		bot.PrivMsgSentFilter,
 	}
 
-	bot, err := bot.New(logger, bot.WebSocketDialer, url, jwt, true, filters...)
+	bot, err := bot.New(ctx, logger, bot.WebSocketDialer, url, jwt, true, filters...)
 	if err != nil {
 		return nil, fmt.Errorf("error creating bot: %w", err)
 	}
@@ -58,13 +59,13 @@ func New(
 
 	boil.SetDB(db)
 
-	source, err := trivia.NewDefaultDBSource(db)
+	source, err := trivia.NewDefaultDBSource(ctx, db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create DB source: %w", err)
 	}
 
 	var lboard *trivia.Leaderboard
-	lboard, err = trivia.NewLeaderboard(logger, db)
+	lboard, err = trivia.NewLeaderboard(ctx, logger, db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init leaderboard: %w", err)
 	}
@@ -80,15 +81,15 @@ func New(
 	bot.OnMessage(t.onMsg)
 	bot.OnPrivMessage(t.onPrivMsg)
 
-	if err = t.generateLeaderboardPage(); err != nil {
+	if err = t.generateLeaderboardPage(ctx); err != nil {
 		return nil, fmt.Errorf("failed to generate leaderboard page on startup: %w", err)
 	}
 
 	return t, nil
 }
 
-func (t *TriviaBot) Run() error {
-	return t.bot.Run()
+func (t *TriviaBot) Run(ctx context.Context) error {
+	return t.bot.Run(ctx)
 }
 
 func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
@@ -100,7 +101,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 	}
 
 	if strings.Contains(msg.Data, "help") || strings.Contains(msg.Data, "info") {
-		return t.bot.Send(
+		return t.bot.Send(ctx,
 			"Start a new round with `trivia start`. Whisper me the number beside the answer `/w trivia 2`.",
 		)
 	}
@@ -111,22 +112,22 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 	// }
 
 	if strings.Contains(msg.Data, "leaderboard") || strings.Contains(msg.Data, "highscore") {
-		return t.bot.Send(t.leaderboardIngress)
+		return t.bot.Send(ctx, t.leaderboardIngress)
 	}
 
 	if strings.Contains(msg.Data, "start") || strings.Contains(msg.Data, "new") {
 		if t.quiz != nil && t.quiz.InProgress() {
-			return t.bot.Send("a quiz is already in progress")
+			return t.bot.Send(ctx, "a quiz is already in progress")
 		}
 
 		fiveMinAgo := time.Now().Add(-5 * time.Minute)
 		if t.lastQuizEndedAt.After(fiveMinAgo) {
 			timeLeft := t.lastQuizEndedAt.Sub(fiveMinAgo).Round(time.Second)
-			return t.bot.Send(fmt.Sprintf("on cooldown for %s PepoSleep", timeLeft))
+			return t.bot.Send(ctx, fmt.Sprintf("on cooldown for %s PepoSleep", timeLeft))
 		}
 
 		// TODO: allow for providing quiz size
-		quiz, err := trivia.NewDefaultQuiz(t.logger, t.source)
+		quiz, err := trivia.NewDefaultQuiz(ctx, t.logger, t.source)
 		if err != nil {
 			return fmt.Errorf("failed to create a new quiz: %w", err)
 		}
@@ -134,7 +135,11 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 
 		go func() {
 			if err = t.runQuiz(ctx, msg.User); err != nil {
-				t.logger.Fatalf("failed while running the quiz: %v", err)
+				if errors.Is(err, context.Canceled) {
+					t.logger.Info("quiz canceled due to shutdown")
+					return
+				}
+				t.logger.Errorf("failed while running the quiz: %v", err)
 			}
 		}()
 	}
@@ -148,30 +153,30 @@ func (t *TriviaBot) onPrivMsg(ctx context.Context, msg *bot.Msg) error {
 	if strings.HasPrefix(msg.Data, "remove") && msg.IsMod() {
 		question := strings.TrimPrefix(msg.Data, "remove ")
 		if question == "" {
-			return t.bot.SendPriv("invalid question data", msg.User)
+			return t.bot.SendPriv(ctx, "invalid question data", msg.User)
 		}
 
 		if err := t.setQuestionRemoved(ctx, question); err != nil {
-			return t.bot.SendPriv(fmt.Sprintf("Error: %q", err), msg.User)
+			return t.bot.SendPriv(ctx, fmt.Sprintf("Error: %q", err), msg.User)
 		}
 
-		return t.bot.SendPriv("PepOk removed", msg.User)
+		return t.bot.SendPriv(ctx, "PepOk removed", msg.User)
 	}
 
 	if t.quiz != nil && t.quiz.InProgress() {
 		answer, err := strconv.Atoi(msg.Data)
 		if err != nil {
-			return t.bot.SendPriv(
+			return t.bot.SendPriv(ctx,
 				"Invalid answer NOPERS whisper the number of the answer. `/w trivia 2`",
 				msg.User,
 			)
 		}
 
 		if !t.quiz.CurrentRound().NewParticipant(msg.User, answer-1, msg.Time) {
-			return t.bot.SendPriv("Your answer is invalid or you have already submitted one!", msg.User)
+			return t.bot.SendPriv(ctx, "Your answer is invalid or you have already submitted one!", msg.User)
 		}
 
-		return t.bot.SendPriv("Your answer has been locked in", msg.User)
+		return t.bot.SendPriv(ctx, "Your answer has been locked in", msg.User)
 	}
 
 	return nil
@@ -184,36 +189,52 @@ func (t *TriviaBot) runQuiz(ctx context.Context, user string) error {
 
 	// insert who started the quiz to deter starting and not participating
 	t.quiz.Scoreboard[user] = 0
-	round, err := t.quiz.StartRound(t.onRoundCompletion)
+	round, err := t.quiz.StartRound(ctx, t.onRoundCompletion)
 	if err != nil {
 		return fmt.Errorf("failed to start the round: %w", err)
 	}
 
 	t.logger.Infof("quiz started by %s", user)
 	output := "Quiz starting soon! `/w trivia <number>` to answer."
-	if err = t.bot.Send(output); err != nil {
+	if err = t.bot.Send(ctx, output); err != nil {
 		return fmt.Errorf("failed to send starting message: %w", err)
 	}
 
-	time.Sleep(10 * time.Second)
+	select {
+	case <-ctx.Done():
+		t.logger.Info("context canceled, stopping quiz before first round")
+		return context.Canceled
+	case <-time.After(10 * time.Second):
+	}
 
 	if err = t.runRound(ctx, round); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return err
+		}
 		return fmt.Errorf("error running round: %w", err)
 	}
 
 	// continue running rounds
 	for !round.Final {
 		t.logger.Infof("running next round %d", round.Num)
-		round, err = t.quiz.StartRound(t.onRoundCompletion)
+		round, err = t.quiz.StartRound(ctx, t.onRoundCompletion)
 		if err != nil {
 			return fmt.Errorf("failed to start the round: %w", err)
 		}
 		if err = t.runRound(ctx, round); err != nil {
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
 			return fmt.Errorf("error running round: %w", err)
 		}
 	}
 
-	time.Sleep(5 * time.Second)
+	select {
+	case <-ctx.Done():
+		t.logger.Info("context canceled, stopping quiz before scoring")
+		return context.Canceled
+	case <-time.After(5 * time.Second):
+	}
 
 	output = "Quiz complete! The following users are awarded points: "
 	if len(t.quiz.Scoreboard) == 0 {
@@ -262,15 +283,15 @@ func (t *TriviaBot) runQuiz(ctx context.Context, user string) error {
 			}
 		}
 
-		if err = t.leaderboard.Update(ss); err != nil {
+		if err = t.leaderboard.Update(ctx, ss); err != nil {
 			return fmt.Errorf("failed to update leaderboard: %w", err)
 		}
-		if err = t.generateLeaderboardPage(); err != nil {
+		if err = t.generateLeaderboardPage(ctx); err != nil {
 			return fmt.Errorf("failed to generated leaderboard: %w", err)
 		}
 	}
 
-	return t.bot.Send(output)
+	return t.bot.Send(ctx, output)
 }
 
 func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
@@ -280,7 +301,12 @@ func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
 	} else {
 		defer func() {
 			t.logger.Info("sleeping for 25 seconds until next round")
-			time.Sleep(25 * time.Second)
+			select {
+			case <-ctx.Done():
+				t.logger.Info("context canceled during round delay")
+				return
+			case <-time.After(25 * time.Second):
+			}
 		}()
 	}
 
@@ -291,24 +317,28 @@ func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
 	}
 
 	t.logger.Infow("running round and waiting for completion", "output", output)
-	if err := t.bot.Send(output); err != nil {
+	if err := t.bot.Send(ctx, output); err != nil {
 		return fmt.Errorf("failed to send round start msgs: %w", err)
 	}
 
 	round.StartedAt = time.Now()
 
 	for {
-		if !t.quiz.InProgress() {
-			t.logger.Info("round is no longer in progress.. breaking")
-			break
+		select {
+		case <-ctx.Done():
+			t.logger.Info("context canceled, stopping round")
+			return context.Canceled
+		default:
+			if !t.quiz.InProgress() {
+				t.logger.Info("round is no longer in progress.. breaking")
+				return nil
+			}
+			time.Sleep(500 * time.Millisecond)
 		}
-		time.Sleep(500 * time.Millisecond)
 	}
-
-	return nil
 }
 
-func (t *TriviaBot) onRoundCompletion(correct string, score []*trivia.Participant) error {
+func (t *TriviaBot) onRoundCompletion(ctx context.Context, correct string, score []*trivia.Participant) error {
 	output := fmt.Sprintf("Round complete! The correct answer is %s.", correct)
 	defer func() {
 		t.lastQuizEndedAt = time.Now()
@@ -317,7 +347,7 @@ func (t *TriviaBot) onRoundCompletion(correct string, score []*trivia.Participan
 
 	if len(score) == 0 {
 		output += " No one answered correctly DuckerZ"
-		return t.bot.Send(output)
+		return t.bot.Send(ctx, output)
 	}
 
 	var line string
@@ -338,7 +368,7 @@ func (t *TriviaBot) onRoundCompletion(correct string, score []*trivia.Participan
 	}
 
 	output += english.OxfordWordSeries(entries, "and")
-	return t.bot.Send(output)
+	return t.bot.Send(ctx, output)
 }
 
 const tpl = `
@@ -509,8 +539,8 @@ const tpl = `
   </body>
 </html>`
 
-func (t *TriviaBot) generateLeaderboardPage() error {
-	highscores, err := t.leaderboard.Highscores(0)
+func (t *TriviaBot) generateLeaderboardPage(ctx context.Context) error {
+	highscores, err := t.leaderboard.Highscores(ctx, 0)
 	if err != nil {
 		return fmt.Errorf("failed to get highscores: %w", err)
 	}
@@ -534,7 +564,7 @@ func (t *TriviaBot) generateLeaderboardPage() error {
 		Highscores:  highscores,
 	}
 
-	if err = os.MkdirAll(filepath.Dir(t.leaderboardOutputPath), 0755); err != nil {
+	if err = os.MkdirAll(filepath.Dir(t.leaderboardOutputPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create leaderbord output dir (%s): %w", t.leaderboardOutputPath, err)
 	}
 

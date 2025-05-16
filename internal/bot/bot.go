@@ -61,6 +61,7 @@ func WebSocketDialer(ctx context.Context, url string, opts *websocket.DialOption
 }
 
 func New(
+	ctx context.Context,
 	logger *zap.SugaredLogger,
 	dialer Dialer,
 	url, jwt string,
@@ -75,15 +76,15 @@ func New(
 		url:       url,
 		token:     jwt,
 	}
-	if err := b.dial(url, jwt); err != nil {
+	if err := b.dial(ctx, url, jwt); err != nil {
 		return nil, fmt.Errorf("failed to create bot: %w", err)
 	}
 	return b, nil
 }
 
-func (b *Bot) dial(url, jwt string) error {
+func (b *Bot) dial(ctx context.Context, url, jwt string) error {
 	c, _, err := b.dialer(
-		context.Background(),
+		ctx,
 		url,
 		&websocket.DialOptions{
 			HTTPHeader: http.Header{
@@ -99,7 +100,7 @@ func (b *Bot) dial(url, jwt string) error {
 	return nil
 }
 
-func (b *Bot) Send(msg string) error {
+func (b *Bot) Send(ctx context.Context, msg string) error {
 	if msg == b.lastSentMsg {
 		msg += " ."
 	}
@@ -111,7 +112,7 @@ func (b *Bot) Send(msg string) error {
 		return fmt.Errorf("failed to marshal output message: %w", err)
 	}
 
-	if err = b.send(fmt.Sprintf("MSG %s", string(marsha))); err != nil {
+	if err = b.send(ctx, fmt.Sprintf("MSG %s", string(marsha))); err != nil {
 		return fmt.Errorf("failed to send message %q: %w", msg, err)
 	}
 
@@ -120,7 +121,7 @@ func (b *Bot) Send(msg string) error {
 	return nil
 }
 
-func (b *Bot) SendPriv(msg, user string) error {
+func (b *Bot) SendPriv(ctx context.Context, msg, user string) error {
 	marsha, err := json.Marshal(&Msg{
 		Data: strings.ReplaceAll(html.UnescapeString(msg), "\"", "'"),
 		User: user,
@@ -129,7 +130,7 @@ func (b *Bot) SendPriv(msg, user string) error {
 		return fmt.Errorf("failed to marshal output message: %w", err)
 	}
 
-	if err = b.send(fmt.Sprintf("PRIVMSG %s", string(marsha))); err != nil {
+	if err = b.send(ctx, fmt.Sprintf("PRIVMSG %s", string(marsha))); err != nil {
 		return fmt.Errorf("failed to priv send message %q to %q: %w", msg, user, err)
 	}
 
@@ -146,7 +147,7 @@ func (b *Bot) OnPrivMessage(funcs ...func(context.Context, *Msg) error) {
 	b.onPrivMsgFuncs = append(b.onPrivMsgFuncs, funcs...)
 }
 
-func (b *Bot) Run() error {
+func (b *Bot) Run(ctx context.Context) error {
 	defer func() {
 		if err := b.Destroy(); err != nil {
 			b.logger.Fatalf("failed to destroy bot: %v", err)
@@ -156,56 +157,76 @@ func (b *Bot) Run() error {
 	b.logger.Info("bot is now running")
 	rawMsgs := make(chan string)
 
-	eg, ctx := errgroup.WithContext(context.Background())
+	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		defer close(rawMsgs)
 
 		for {
-			_, data, err := b.conn.Read(ctx)
-			if err != nil {
-				if b.reconnect {
-					return b.dial(b.url, b.token)
+			select {
+			case <-egCtx.Done():
+				b.logger.Info("context canceled, stopping read loop")
+				return nil
+			default:
+				_, data, err := b.conn.Read(egCtx)
+				if err != nil {
+					if egCtx.Err() != nil {
+						// Context was canceled, exit gracefully
+						return nil
+					}
+					if b.reconnect {
+						return b.dial(ctx, b.url, b.token)
+					}
+					return fmt.Errorf("failed while reading message: %w", err)
 				}
-				return fmt.Errorf("failed while reading message: %w", err)
+				b.logger.Debugw("message read", "msg", string(data))
+				rawMsgs <- string(data)
 			}
-			b.logger.Debugw("message read", "msg", string(data))
-			rawMsgs <- string(data)
 		}
 	})
 
 	eg.Go(func() error {
 	OUTER:
-		for raw := range rawMsgs {
-			for _, filter := range b.filters {
-				if strings.HasPrefix(raw, string(filter)) {
-					continue OUTER
+		for {
+			select {
+			case <-egCtx.Done():
+				b.logger.Info("context canceled, stopping process loop")
+				return nil
+			case raw, ok := <-rawMsgs:
+				if !ok {
+					b.logger.Info("raw messages channel closed")
+					return nil
 				}
-			}
 
-			msg, err := parseMsg(raw)
-			if err != nil {
-				b.logger.Infow("failed to parse message", "err", err)
-				continue
-			}
-
-			b.logger.Debugw("parsed message", "msg", msg)
-			switch msg.Kind {
-			case "MSG":
-				for _, f := range b.onMsgFuncs {
-					if err = f(ctx, msg); err != nil {
-						return fmt.Errorf("on message func err: %w", err)
+				for _, filter := range b.filters {
+					if strings.HasPrefix(raw, string(filter)) {
+						continue OUTER
 					}
 				}
-			case "PRIVMSG":
-				for _, f := range b.onPrivMsgFuncs {
-					if err = f(ctx, msg); err != nil {
-						return fmt.Errorf("on private message func err: %w", err)
-					}
+
+				msg, err := parseMsg(raw)
+				if err != nil {
+					b.logger.Infow("failed to parse message", "err", err)
+					continue
 				}
-			default:
+
+				b.logger.Debugw("parsed message", "msg", msg)
+				switch msg.Kind {
+				case "MSG":
+					for _, f := range b.onMsgFuncs {
+						if err = f(egCtx, msg); err != nil {
+							return fmt.Errorf("on message func err: %w", err)
+						}
+					}
+				case "PRIVMSG":
+					for _, f := range b.onPrivMsgFuncs {
+						if err = f(egCtx, msg); err != nil {
+							return fmt.Errorf("on private message func err: %w", err)
+						}
+					}
+				default:
+				}
 			}
 		}
-		return nil
 	})
 
 	if err := eg.Wait(); err != nil {
@@ -245,9 +266,9 @@ func parseMsg(raw string) (*Msg, error) {
 	return out, nil
 }
 
-func (b *Bot) send(msg string) error {
+func (b *Bot) send(ctx context.Context, msg string) error {
 	b.logger.Debugw("sending message", "msg", msg)
-	if err := b.conn.Write(context.Background(), websocket.MessageText, []byte(msg)); err != nil {
+	if err := b.conn.Write(ctx, websocket.MessageText, []byte(msg)); err != nil {
 		return fmt.Errorf("failed to write message: %w", err)
 	}
 	return nil

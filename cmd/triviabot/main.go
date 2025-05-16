@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/jbpratt/bots/internal/triviabot"
 	"go.uber.org/zap"
@@ -38,6 +41,17 @@ func main() {
 		}
 	}()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		s := <-c
+		logger.Sugar().Infow("received signal, shutting down", "signal", s)
+		cancel()
+	}()
+
 	url, jwt := os.Getenv("STRIMS_CHAT_WSS_URL"), os.Getenv("STRIMS_CHAT_TOKEN")
 	if url == "" {
 		url = serverURL
@@ -46,12 +60,12 @@ func main() {
 		logger.Fatal("must provide $STRIMS_CHAT_TOKEN")
 	}
 
-	triviabot, err := triviabot.New(logger.Sugar(), url, jwt, *dbPath, *leaderboardPage, *leaderboardIngress)
+	triviabot, err := triviabot.New(ctx, logger.Sugar(), url, jwt, *dbPath, *leaderboardPage, *leaderboardIngress)
 	if err != nil {
 		logger.Fatal(err.Error())
 	}
 
-	if err = triviabot.Run(); err != nil {
+	if err = triviabot.Run(ctx); err != nil {
 		logger.Fatal(err.Error())
 	}
 }
