@@ -115,9 +115,26 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 		return t.bot.Send(ctx, t.leaderboardIngress)
 	}
 
+	if strings.Contains(msg.Data, "cancel") {
+		if !msg.IsMod() {
+			return t.bot.Send(ctx, "Only mods can cancel a running quiz")
+		}
+
+		if t.quiz == nil || !t.quiz.InProgress() {
+			return t.bot.Send(ctx, "No quiz is currently running")
+		}
+
+		if err := t.quiz.Cancel(); err != nil {
+			return fmt.Errorf("failed to cancel quiz: %w", err)
+		}
+
+		t.lastQuizEndedAt = time.Now()
+		return t.bot.Send(ctx, "The quiz has been canceled by a moderator")
+	}
+
 	if strings.Contains(msg.Data, "start") || strings.Contains(msg.Data, "new") {
 		if t.quiz != nil && t.quiz.InProgress() {
-			return t.bot.Send(ctx, "a quiz is already in progress")
+			return t.bot.Send(ctx, "A quiz is already in progress")
 		}
 
 		fiveMinAgo := time.Now().Add(-5 * time.Minute)
@@ -136,7 +153,6 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 		go func() {
 			if err = t.runQuiz(ctx, msg.User); err != nil {
 				if errors.Is(err, context.Canceled) {
-					t.logger.Info("quiz canceled due to shutdown")
 					return
 				}
 				t.logger.Errorf("failed while running the quiz: %v", err)
@@ -204,6 +220,9 @@ func (t *TriviaBot) runQuiz(ctx context.Context, user string) error {
 	case <-ctx.Done():
 		t.logger.Info("context canceled, stopping quiz before first round")
 		return context.Canceled
+	case <-t.quiz.Done():
+		t.logger.Info("quiz canceled before first round")
+		return context.Canceled
 	case <-time.After(10 * time.Second):
 	}
 
@@ -232,6 +251,9 @@ func (t *TriviaBot) runQuiz(ctx context.Context, user string) error {
 	select {
 	case <-ctx.Done():
 		t.logger.Info("context canceled, stopping quiz before scoring")
+		return context.Canceled
+	case <-t.quiz.Done():
+		t.logger.Info("quiz canceled before scoring")
 		return context.Canceled
 	case <-time.After(5 * time.Second):
 	}
@@ -305,6 +327,9 @@ func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
 			case <-ctx.Done():
 				t.logger.Info("context canceled during round delay")
 				return
+			case <-t.quiz.Done():
+				t.logger.Info("quiz canceled during round delay")
+				return
 			case <-time.After(25 * time.Second):
 			}
 		}()
@@ -327,6 +352,9 @@ func (t *TriviaBot) runRound(ctx context.Context, round *trivia.Round) error {
 		select {
 		case <-ctx.Done():
 			t.logger.Info("context canceled, stopping round")
+			return context.Canceled
+		case <-t.quiz.Done():
+			t.logger.Info("quiz canceled, stopping round")
 			return context.Canceled
 		default:
 			if !t.quiz.InProgress() {

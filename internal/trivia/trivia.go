@@ -47,6 +47,8 @@ type Quiz struct {
 	Rounds     []*Round
 	Timer      *time.Timer
 	Scoreboard map[string]int
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 func NewDefaultQuiz(ctx context.Context, logger *zap.SugaredLogger, source Source) (*Quiz, error) {
@@ -54,12 +56,15 @@ func NewDefaultQuiz(ctx context.Context, logger *zap.SugaredLogger, source Sourc
 }
 
 func NewQuiz(ctx context.Context, logger *zap.SugaredLogger, size int, duration time.Duration, source Source) (*Quiz, error) {
+	quizCtx, cancel := context.WithCancel(ctx)
 	quiz := &Quiz{
 		duration:     duration,
 		logger:       logger,
 		rng:          rand.New(rand.NewSource(time.Now().UnixNano())),
 		currentRound: -1,
 		Scoreboard:   map[string]int{},
+		ctx:          quizCtx,
+		cancel:       cancel,
 	}
 
 	quiz.logger.Info("creating new series of rounds")
@@ -181,6 +186,30 @@ func (q *Quiz) Score() map[string]int {
 	data := map[string]int{}
 	maps.Copy(data, q.Scoreboard)
 	return data
+}
+
+// Done returns a channel that's closed when the quiz is canceled.
+// This can be used in select statements to detect when a quiz has been canceled.
+func (q *Quiz) Done() <-chan struct{} {
+	return q.ctx.Done()
+}
+
+func (q *Quiz) Cancel() error {
+	if !q.InProgress() {
+		return errors.New("no quiz in progress to cancel")
+	}
+
+	q.logger.Info("canceling quiz")
+	q.Timer.Stop()
+
+	q.rw.Lock()
+	defer q.rw.Unlock()
+	q.inProgress = false
+
+	// Cancel the context to stop any goroutines waiting on it
+	q.cancel()
+
+	return nil
 }
 
 type Round struct {
