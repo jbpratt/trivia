@@ -30,6 +30,8 @@ type TriviaBot struct {
 	lastQuizEndedAt       time.Time
 	leaderboardOutputPath string
 	leaderboardIngress    string
+	lastWinner            string
+	winStreak             int
 }
 
 func New(
@@ -216,19 +218,48 @@ func (t *TriviaBot) runQuiz(ctx context.Context, user string) error {
 	output = "Quiz complete! The following users are awarded points: "
 	if len(t.quiz.Scoreboard) == 0 {
 		output += "No one! DuckerZ"
+		// Reset streak when no winner
+		t.lastWinner = ""
+		t.winStreak = 0
 	} else {
 		ss := t.quiz.Score()
 		winners := []string{}
+		var topScorer string
+		var topScore int
+
+		// Find the top scorer
 		for name, points := range ss {
 			if points > 0 {
 				winners = append(winners, fmt.Sprintf("%s +%d point(s)", name, points))
+				if points > topScore {
+					topScore = points
+					topScorer = name
+				}
 			}
 		}
 
 		if len(winners) == 0 {
 			output += "No one! DuckerZ"
+			// Reset streak when no winner
+			t.lastWinner = ""
+			t.winStreak = 0
 		} else {
 			output += english.OxfordWordSeries(winners, "and")
+
+			// Check if we have a top scorer and if they're continuing a streak
+			if topScorer != "" {
+				if topScorer == t.lastWinner {
+					t.winStreak++
+					if t.winStreak > 1 {
+						output += fmt.Sprintf(" %s is on a %d quiz win streak! PogChamp",
+							topScorer, t.winStreak)
+					}
+				} else {
+					// New winner, reset streak
+					t.lastWinner = topScorer
+					t.winStreak = 1
+				}
+			}
 		}
 
 		if err = t.leaderboard.Update(ss); err != nil {
