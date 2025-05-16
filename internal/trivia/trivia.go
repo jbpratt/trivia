@@ -40,10 +40,11 @@ type Quiz struct {
 	duration     time.Duration
 	currentRound int
 	rng          *rand.Rand
-	Rounds       []*Round
-	Timer        *time.Timer
 	inProgress   bool
-	Scoreboard   map[string]int
+
+	Rounds     []*Round
+	Timer      *time.Timer
+	Scoreboard map[string]int
 }
 
 func NewDefaultQuiz(logger *zap.SugaredLogger, source Source) (*Quiz, error) {
@@ -91,7 +92,6 @@ func (q *Quiz) InProgress() bool {
 func (q *Quiz) StartRound(
 	onComplete func(string, []*Participant) error,
 ) (*Round, error) {
-
 	if q.InProgress() {
 		return nil, errors.New("a quiz is already in progress")
 	}
@@ -196,11 +196,13 @@ type Round struct {
 func (r *Round) NewParticipant(username string, answer int, timeIn int64) bool {
 	for _, participant := range r.Participants {
 		if participant.Name == username {
+			r.logger.Infow("user already participating", "username", username)
 			return false
 		}
 	}
 
 	if answer >= len(r.Question.Answers) {
+		r.logger.Infow("invalid answer", "username", username, "answer", answer)
 		return false
 	}
 
