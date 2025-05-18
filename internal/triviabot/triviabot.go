@@ -138,7 +138,7 @@ func (t *TriviaBot) onMsg(ctx context.Context, msg *bot.Msg) error {
 		}
 
 		fiveMinAgo := time.Now().Add(-5 * time.Minute)
-		if t.lastQuizEndedAt.After(fiveMinAgo) {
+		if t.lastQuizEndedAt.After(fiveMinAgo) && !msg.IsMod() {
 			timeLeft := t.lastQuizEndedAt.Sub(fiveMinAgo).Round(time.Second)
 			return t.bot.Send(ctx, fmt.Sprintf("on cooldown for %s PepoSleep", timeLeft))
 		}
