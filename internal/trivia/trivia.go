@@ -70,9 +70,17 @@ func NewQuiz(ctx context.Context, logger *zap.SugaredLogger, size int, duration 
 	quiz.logger.Info("creating new series of rounds")
 
 	for i := range size {
-		question, err := source.Question(ctx)
-		if err != nil {
-			return nil, err
+		var question *Question
+		var err error
+		for {
+			question, err = source.Question(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if len(question.Answers) <= 4 {
+				break
+			}
+			quiz.logger.Warnf("question (%q) has too many answers (%d), skipping", question.Question, len(question.Answers))
 		}
 
 		quiz.Rounds = append(quiz.Rounds, &Round{
