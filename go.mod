@@ -1,6 +1,6 @@
 module github.com/jbpratt/bots
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/coder/websocket v1.8.13
@@ -12,7 +12,7 @@ require (
 	github.com/volatiletech/sqlboiler/v4 v4.19.1
 	github.com/volatiletech/strmangle v0.0.8
 	go.uber.org/zap v1.27.0
-	golang.org/x/sync v0.15.0
+	golang.org/x/sync v0.17.0
 )
 
 require (
